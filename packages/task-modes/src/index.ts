@@ -2,13 +2,11 @@ import type {
   AssistantAgentRole,
   AssistantRequestContext,
   BugBountyReviewProposal,
-  Capability,
   DocumentProposal,
   MoochackerAssessment,
   OpsPlanProposal,
   ProductivityPlanProposal,
   RiskLevel,
-  SafetyDecision,
   SecurityReviewProposal,
   TaskModeExecutionResult,
   TaskModeProposal,
@@ -16,9 +14,11 @@ import type {
 } from "@dure/core";
 import { createStableId } from "@dure/core";
 import { DureOrchestrator } from "@dure/orchestrator";
+import { SafetyPolicyEngine } from "@dure/safety-policy";
 
 export class TaskModeRunner {
   private readonly developmentOrchestrator = new DureOrchestrator();
+  private readonly safetyPolicy = new SafetyPolicyEngine();
 
   execute(context: AssistantRequestContext): TaskModeExecutionResult {
     switch (context.selectedMode) {
@@ -46,18 +46,11 @@ export class TaskModeRunner {
   private runDevelopmentMode(context: AssistantRequestContext): TaskModeExecutionResult {
     const developmentResult = this.developmentOrchestrator.run(context.originalInput);
     const selectedAgentTeam: readonly AssistantAgentRole[] = developmentResult.goalState.requiredAgents;
-    const safetyDecision: SafetyDecision = {
-      allowed: developmentResult.verificationResult.accepted,
-      requiresApproval: context.requiresUserApproval,
-      externalToolsRequired: context.requiresExternalTools,
-      summary: developmentResult.verificationResult.accepted
-        ? "Development patch proposal passed the v0.1 verification gate."
-        : "Development patch proposal failed the v0.1 verification gate.",
-      blockedCapabilities: [],
-      details: developmentResult.verificationResult.checks.map(
-        (check) => `${check.name}: ${check.passed ? "pass" : "fail"} (${check.mocked ? "mocked" : "local"})`
-      )
-    };
+    const safetyDecision = this.safetyPolicy.evaluate({
+      context,
+      proposal: developmentResult.patchProposal,
+      verificationResult: developmentResult.verificationResult
+    });
 
     return {
       mode: "development",
@@ -80,35 +73,8 @@ function buildStaticModeResult(
     mode: context.selectedMode,
     selectedAgentTeam,
     proposal,
-    safetyDecision: buildSafetyDecision(context),
+    safetyDecision: new SafetyPolicyEngine().evaluate({ context, proposal }),
     nextRecommendedAction: proposal.nextActions[0] ?? "Review the proposal before taking action."
-  };
-}
-
-function buildSafetyDecision(context: AssistantRequestContext): SafetyDecision {
-  const blockedCapabilities = context.requiresExternalTools
-    ? context.requiredCapabilities.filter((capability) => capability.endsWith("_placeholder"))
-    : [];
-  const externalToolDetail =
-    context.selectedMode === "bug_bounty"
-      ? "No real target, test account, browser session, scanner, network request, or external service was accessed."
-      : "No real email, calendar, server, shell, network, or cloud resource was accessed.";
-
-  return {
-    allowed: true,
-    requiresApproval: context.requiresUserApproval,
-    externalToolsRequired: context.requiresExternalTools,
-    summary:
-      context.selectedMode === "bug_bounty"
-        ? "Only passive bug bounty planning was produced; active testing remains blocked in v0.1."
-        : context.requiresExternalTools
-          ? "Only a plan was produced; real external integrations remain blocked in v0.1."
-          : "Safe deterministic proposal produced without external side effects.",
-    blockedCapabilities,
-    details: [
-      ...context.safetyRequirements,
-      context.requiresExternalTools ? externalToolDetail : "No external integration was required."
-    ]
   };
 }
 

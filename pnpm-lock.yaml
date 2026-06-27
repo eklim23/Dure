@@ -95,6 +95,12 @@ importers:
         specifier: workspace:*
         version: link:../verifier
 
+  packages/safety-policy:
+    dependencies:
+      '@dure/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/sandbox:
     dependencies:
       '@dure/core':
@@ -115,6 +121,9 @@ importers:
       '@dure/orchestrator':
         specifier: workspace:*
         version: link:../orchestrator
+      '@dure/safety-policy':
+        specifier: workspace:*
+        version: link:../safety-policy
 
   packages/verifier:
     dependencies:

@@ -7,9 +7,5 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["src/**/*.ts", "test/**/*.ts"],
-  "references": [
-    { "path": "../core" },
-    { "path": "../orchestrator" },
-    { "path": "../safety-policy" }
-  ]
+  "references": [{ "path": "../core" }]
 }

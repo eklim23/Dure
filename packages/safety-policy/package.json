@@ -1,7 +1,7 @@
 {
-  "name": "@dure/task-modes",
+  "name": "@dure/safety-policy",
   "version": "0.1.0",
-  "description": "Deterministic task mode implementations for the assistant core.",
+  "description": "Deterministic safety policy engine for Dure task modes.",
   "license": "MIT",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -11,8 +11,6 @@
     "test:run": "node --test dist/test/*.test.js"
   },
   "dependencies": {
-    "@dure/core": "workspace:*",
-    "@dure/orchestrator": "workspace:*",
-    "@dure/safety-policy": "workspace:*"
+    "@dure/core": "workspace:*"
   }
 }

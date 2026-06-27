@@ -20,7 +20,7 @@ Other assistant capabilities can exist as supporting utilities, but they should 
 - Bug Bounty Mode with authorization, scope, evidence, and report gates
 - Documentation, Security, Operations, Productivity, and Assistant modes as supporting deterministic stubs
 - Single Writer, Multi Reviewer for development patches
-- Verification and safety gates
+- Verification and safety policy gates
 - Decision log / memory
 - Skill registry stub
 - No external API keys required
@@ -302,6 +302,7 @@ packages/orchestrator    Development mode intent, MVP ladder, council, verificat
 packages/council         Deterministic mock reviewer agents
 packages/builder-runtime Single-writer patch proposal runtime
 packages/verifier        Verification gate interfaces and local scans
+packages/safety-policy   Mode capability policy and stop-condition engine
 packages/skill-registry  Previewable skill manifest registry
 packages/sandbox         Controlled path and workspace helpers
 packages/memory          Decision log recorder
@@ -314,6 +315,7 @@ examples/                Future example projects
 
 - Agent reasoning is deterministic and rule-based.
 - Task mode routing is keyword/signal based.
+- Safety policy evaluation is deterministic and local; policy configuration is not user-editable yet.
 - MoochackerAgent produces structured bug bounty safety guidance only; active testing, target access, and external requests are not executed.
 - Bug bounty evidence records are user-supplied ledger entries; Dure does not prove, reproduce, or actively test findings in v0.1.
 - Bug bounty report drafts are generated from stored evidence only; Dure does not validate findings, submit reports, or contact targets.

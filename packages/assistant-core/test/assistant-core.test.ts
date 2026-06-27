@@ -29,6 +29,8 @@ test("assistant core supports bug bounty mode", () => {
   assert.equal(result.proposal.kind, "bug_bounty_review");
   assert.ok(result.selectedAgentTeam.includes("MoochackerAgent"));
   assert.equal(result.proposal.moochackerAssessment.agent, "MoochackerAgent");
+  assert.equal(result.safetyDecision.policyEvaluation?.mode, "bug_bounty");
+  assert.ok(result.safetyDecision.blockedCapabilities.includes("map_targets_placeholder"));
 
   const teamEntry = result.decisionLog.entries.find((entry) => entry.type === "selected_agent_team");
   assert.ok(teamEntry);
@@ -102,6 +104,8 @@ test("assistant core persists MoochackerAgent in bug bounty run metadata", async
   assert.ok(preview.metadata.selectedAgentTeam.includes("MoochackerAgent"));
   assert.equal(preview.proposal.kind, "bug_bounty_review");
   assert.equal(preview.proposal.moochackerAssessment.agent, "MoochackerAgent");
+  assert.equal(preview.safetyDecision.policyEvaluation?.mode, "bug_bounty");
+  assert.ok(preview.safetyDecision.blockedCapabilities.includes("collect_evidence_placeholder"));
 });
 
 test("assistant core does not persist when persist is false", async () => {

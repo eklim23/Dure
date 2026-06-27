@@ -21,6 +21,7 @@
       "@dure/memory": ["packages/memory/src/index.ts"],
       "@dure/orchestrator": ["packages/orchestrator/src/index.ts"],
       "@dure/intent-router": ["packages/intent-router/src/index.ts"],
+      "@dure/safety-policy": ["packages/safety-policy/src/index.ts"],
       "@dure/task-modes": ["packages/task-modes/src/index.ts"],
       "@dure/assistant-core": ["packages/assistant-core/src/index.ts"]
     }

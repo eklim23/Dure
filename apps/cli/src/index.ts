@@ -18,6 +18,7 @@ import type {
   BugBountyScopeRecord,
   PatchProposal,
   RunPreview,
+  SafetyDecision,
   TaskMode,
   TaskModeProposal,
   VerificationCheck,
@@ -676,16 +677,26 @@ function printResult(result: AssistantRunResult): void {
 
   if (result.verificationResult) {
     section("Verification Result", summarizeChecks(result.verificationResult.checks, result.verificationResult.accepted));
-  } else {
-    section("Safety Result", [
-      `allowed: ${result.safetyDecision.allowed ? "yes" : "no"}`,
-      `requires approval: ${result.safetyDecision.requiresApproval ? "yes" : "no"}`,
-      result.safetyDecision.summary,
-      ...result.safetyDecision.details
-    ]);
   }
+  section("Safety Result", summarizeSafetyDecision(result.safetyDecision));
 
   section("Next Recommended Action", [result.nextRecommendedAction]);
+}
+
+function summarizeSafetyDecision(decision: SafetyDecision): readonly string[] {
+  const policy = decision.policyEvaluation;
+  return [
+    `allowed: ${decision.allowed ? "yes" : "no"}`,
+    `requires approval: ${decision.requiresApproval ? "yes" : "no"}`,
+    decision.summary,
+    ...(policy
+      ? [
+          `policy violations: ${policy.violations.length}`,
+          `blocked capabilities: ${formatList(decision.blockedCapabilities)}`
+        ]
+      : []),
+    ...decision.details
+  ];
 }
 
 function printRunPreview(preview: RunPreview): void {

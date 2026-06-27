@@ -86,11 +86,15 @@ User Natural Language Input
 
    `packages/verifier` handles proposal-time patch verification and applied-workspace verification. Proposal-time test, lint, typecheck, and dependency audit checks remain conservative placeholders. Applied-workspace verification may run only `test`, `lint`, and `typecheck` scripts from `package.json`, blocks pre/post lifecycle hooks in v0.1, captures redacted output, and updates the run to `verified` or `failed`.
 
-10. Skill Registry
+10. Safety Policy
+
+   `packages/safety-policy` owns the deterministic v0.1 policy engine. It defines the capability registry, mode-specific allowed capabilities, default external-tool blocking, bug bounty active-testing stop conditions, shared secret redaction rules, and structured policy violation results. Policy evaluation is attached to `SafetyDecision` and persisted in run artifacts.
+
+11. Skill Registry
 
    `packages/skill-registry` previews manifests and refuses to load untrusted skills without explicit approval.
 
-11. Memory / Decision Log
+12. Memory / Decision Log
 
    `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, approval decisions, controlled apply records, workspace verification records, bug bounty scope intake, bug bounty evidence ledger entries, bug bounty report drafts, and next recommended step.
 
@@ -121,6 +125,8 @@ Bug Bounty Mode must record:
 - report sections
 
 Before scope is known, Dure should continue with passive planning only.
+
+The Safety Policy engine blocks active testing stop-condition signals such as denial-of-service, brute force, rate-limit bypass, persistence, destructive testing, out-of-scope testing, and unauthorized access. External bug bounty capabilities remain placeholder-only until an explicit approval and adapter layer exists.
 
 Scope intake is persisted as `.dure/runs/<run-id>/scope.json`. It stores only user-provided assets, rules, roles, and data handling expectations. It does not discover endpoints, infer related targets, contact hosts, run scanners, or store credentials.
 

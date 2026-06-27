@@ -20,6 +20,7 @@
 - Minimal bug bounty scope intake persistence
 - Bug bounty evidence ledger persistence with redaction
 - Bug bounty report draft markdown export
+- Safety policy engine with mode capability allowlists and stop conditions
 
 ## v0.2
 
@@ -28,7 +29,6 @@
 - Evidence ledger and report draft update/edit/export commands
 - Richer Development Mode project-state detection
 - Security checklist engine
-- Persistent decision logs
 - Configurable policy defaults
 - Verification UX polish and richer summaries
 

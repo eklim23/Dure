@@ -10,6 +10,7 @@
     { "path": "./packages/skill-registry" },
     { "path": "./packages/orchestrator" },
     { "path": "./packages/intent-router" },
+    { "path": "./packages/safety-policy" },
     { "path": "./packages/task-modes" },
     { "path": "./packages/assistant-core" },
     { "path": "./apps/cli" }

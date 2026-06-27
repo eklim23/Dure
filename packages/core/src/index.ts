@@ -37,6 +37,65 @@ export type Capability =
   | "read_email_placeholder"
   | "create_task_placeholder";
 
+export type CapabilityExecutionKind = "local" | "external" | "proposal_only";
+
+export interface CapabilityDefinition {
+  readonly capability: Capability;
+  readonly summary: string;
+  readonly executionKind: CapabilityExecutionKind;
+  readonly placeholder: boolean;
+  readonly requiresApproval: boolean;
+  readonly activeTesting: boolean;
+}
+
+export type ExternalToolPolicy = "block_by_default" | "allow_with_approval";
+
+export interface SafetyPolicyRedactionRule {
+  readonly id: string;
+  readonly summary: string;
+  readonly replacement: string;
+}
+
+export interface ModeSafetyPolicy {
+  readonly mode: TaskMode;
+  readonly allowedCapabilities: readonly Capability[];
+  readonly externalToolPolicy: ExternalToolPolicy;
+  readonly requiresApproval: boolean;
+  readonly stopConditions: readonly string[];
+  readonly redactionRules: readonly SafetyPolicyRedactionRule[];
+}
+
+export type SafetyPolicyViolationCode =
+  | "capability_not_allowed"
+  | "external_tool_blocked"
+  | "active_testing_stop_condition"
+  | "bug_bounty_scope_required"
+  | "secret_redaction_required"
+  | "verification_failed";
+
+export type SafetyPolicyViolationSeverity = "warning" | "blocker";
+
+export interface SafetyPolicyViolation {
+  readonly code: SafetyPolicyViolationCode;
+  readonly severity: SafetyPolicyViolationSeverity;
+  readonly message: string;
+  readonly capability?: Capability;
+  readonly recommendation: string;
+}
+
+export interface SafetyPolicyEvaluation {
+  readonly mode: TaskMode;
+  readonly allowed: boolean;
+  readonly requiresApproval: boolean;
+  readonly externalToolsBlocked: boolean;
+  readonly allowedCapabilities: readonly Capability[];
+  readonly blockedCapabilities: readonly Capability[];
+  readonly stopConditions: readonly string[];
+  readonly redactionRules: readonly SafetyPolicyRedactionRule[];
+  readonly violations: readonly SafetyPolicyViolation[];
+  readonly summary: string;
+}
+
 export type AgentRole =
   | "IntentAgent"
   | "ProductAgent"
@@ -620,6 +679,7 @@ export interface SafetyDecision {
   readonly summary: string;
   readonly blockedCapabilities: readonly Capability[];
   readonly details: readonly string[];
+  readonly policyEvaluation?: SafetyPolicyEvaluation;
 }
 
 export interface TaskModeExecutionResult {
