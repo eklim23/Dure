@@ -254,6 +254,8 @@ export type DecisionLogEntryType =
   | "selected_agent_team"
   | "proposal_produced"
   | "safety_decision"
+  | "approval_decision"
+  | "bug_bounty_scope_intake"
   | "inferred_goal"
   | "mvp_scope_decision"
   | "agent_comments"
@@ -285,6 +287,42 @@ export interface RunArtifactPaths {
   readonly decisionLog: string;
   readonly metadata: string;
   readonly verification?: string;
+  readonly approval?: string;
+  readonly scope?: string;
+}
+
+export type ApprovalDecision = "approved" | "rejected";
+
+export interface ApprovalRecord {
+  readonly runId: string;
+  readonly proposalId: string;
+  readonly decision: ApprovalDecision;
+  readonly decidedBy: "user";
+  readonly reason?: string;
+  readonly createdAt: string;
+  readonly previousStatus: RunStatus;
+  readonly nextStatus: RunStatus;
+  readonly nextRecommendedAction: string;
+}
+
+export interface BugBountyScopeIntake {
+  readonly target: string;
+  readonly inScopeAssets: readonly string[];
+  readonly outOfScopeAssets: readonly string[];
+  readonly allowedTechniques: readonly string[];
+  readonly forbiddenTechniques: readonly string[];
+  readonly rateLimits: readonly string[];
+  readonly testAccountRoles: readonly string[];
+  readonly dataHandlingRules: readonly string[];
+  readonly authorizationNote: string;
+  readonly programRulesUrl?: string;
+}
+
+export interface BugBountyScopeRecord extends BugBountyScopeIntake {
+  readonly runId: string;
+  readonly recordedBy: "user";
+  readonly createdAt: string;
+  readonly moochackerAssessment: MoochackerAssessment;
 }
 
 export interface RunRecord {
@@ -316,6 +354,8 @@ export interface RunPreview {
   readonly proposal: TaskModeProposal;
   readonly safetyDecision: SafetyDecision;
   readonly verificationResult?: VerificationResult;
+  readonly approvalRecord?: ApprovalRecord;
+  readonly bugBountyScope?: BugBountyScopeRecord;
   readonly decisionLog: DecisionLog;
   readonly artifactPaths: RunArtifactPaths;
 }

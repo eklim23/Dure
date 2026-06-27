@@ -82,6 +82,23 @@ corepack pnpm cli -- preview <run-id>
 
 The preview command is read-only. It loads `.dure/runs/<run-id>/`, prints the patch summary, proposed file changes, and verification summary, and does not approve, apply, or execute anything.
 
+Approve or reject a persisted patch proposal:
+
+```bash
+corepack pnpm cli -- approve <run-id> --reason "Reviewed the patch proposal"
+corepack pnpm cli -- reject <run-id> --reason "Needs a narrower scope"
+```
+
+Approval records `.dure/runs/<run-id>/approval.json`, updates run metadata to `approved` or `rejected`, and appends to `decision-log.jsonl`. It does not apply files, run commands, commit, push, or execute tests.
+
+Record bug bounty scope intake:
+
+```bash
+corepack pnpm cli -- scope <run-id> --target "api.example.com" --in-scope "api.example.com,/v1/*" --out-of-scope "admin.example.com" --allowed "read-only authorization checks" --forbidden "DoS,brute force" --rate-limit "10 requests per minute" --roles "user,admin-test" --data "redact tokens and personal data" --authorization-note "Program scope supplied by user"
+```
+
+Scope intake writes `.dure/runs/<run-id>/scope.json`, records MoochackerAgent's passive scope assessment, and never contacts the target.
+
 ## Example Output Shape
 
 ```text
@@ -123,6 +140,30 @@ Patch:
   - status: accepted
   - risk: high
   - approval required: yes
+```
+
+Approval example:
+
+```text
+Dure Approval
+
+Run:
+  - id: run-20260627-000003Z-abc123
+  - previous status: proposed
+  - new status: approved
+  - proposal: patch-...
+```
+
+Bug bounty scope example:
+
+```text
+Dure Bug Bounty Scope
+
+Scope:
+  - status: sufficient
+  - safety: caution
+  - in scope: api.example.com, /v1/*
+  - forbidden: DoS, brute force
 ```
 
 Bug bounty example:
@@ -170,6 +211,7 @@ examples/                Future example projects
 - Agent reasoning is deterministic and rule-based.
 - Task mode routing is keyword/signal based.
 - MoochackerAgent produces structured bug bounty safety guidance only; active testing, target access, and external requests are not executed.
+- Approval records are durable gates for later controlled apply; approval itself does not modify files.
 - Test, lint, typecheck, and dependency audit checks are placeholders.
 - Operations and productivity integrations are declarations only.
 - Patch proposals are structured data and are not automatically applied.

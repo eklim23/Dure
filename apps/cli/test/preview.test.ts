@@ -47,6 +47,75 @@ test("preview command rejects non-patch proposals for now", async () => {
   assert.match(result.stderr, /not a development patch proposal/);
 });
 
+test("approve command records approval and updates preview status", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-approve-"));
+  const record = persistRun(tempRoot, patchProposalFixture(), "development");
+
+  const approval = runCli(tempRoot, ["approve", record.id, "--reason", "Reviewed preview output"]);
+  const preview = runCli(tempRoot, ["preview", record.id]);
+
+  assert.equal(approval.status, 0, approval.stderr);
+  assert.match(approval.stdout, /Dure Approval/);
+  assert.match(approval.stdout, /new status: approved/);
+  assert.match(approval.stdout, /reason: Reviewed preview output/);
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.match(preview.stdout, /run status: approved/);
+});
+
+test("approve command rejects non-patch proposals", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-approve-nonpatch-"));
+  const record = persistRun(tempRoot, assistantProposalFixture(), "assistant");
+
+  const result = runCli(tempRoot, ["approve", record.id]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /not a patch proposal/);
+});
+
+test("scope command records bug bounty scope intake", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-scope-"));
+  const record = persistRun(tempRoot, bugBountyProposalFixture(), "bug_bounty");
+
+  const result = runCli(tempRoot, [
+    "scope",
+    record.id,
+    "--target",
+    "api.example.com",
+    "--in-scope",
+    "api.example.com,/v1/*",
+    "--out-of-scope",
+    "admin.example.com",
+    "--allowed",
+    "read-only authorization checks",
+    "--forbidden",
+    "DoS,brute force",
+    "--rate-limit",
+    "10 requests per minute",
+    "--roles",
+    "user,admin-test",
+    "--data",
+    "redact tokens and personal data",
+    "--authorization-note",
+    "Program scope supplied by user"
+  ]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Dure Bug Bounty Scope/);
+  assert.match(result.stdout, /target: api\.example\.com/);
+  assert.match(result.stdout, /status: sufficient/);
+  assert.match(result.stdout, /forbidden: DoS, brute force/);
+});
+
+test("scope command rejects development runs", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-scope-dev-"));
+  const record = persistRun(tempRoot, patchProposalFixture(), "development");
+
+  const result = runCli(tempRoot, ["scope", record.id, "--target", "api.example.com"]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /not a bug bounty proposal/);
+});
+
 function runCli(cwd: string, args: readonly string[]) {
   return spawnSync(process.execPath, [path.resolve("dist", "src", "index.js"), ...args], {
     cwd,
@@ -62,7 +131,12 @@ function persistRun(tempRoot: string, proposal: TaskModeProposal, selectedMode: 
 
   return store.persistRun({
     context: contextFixture(selectedMode),
-    selectedAgentTeam: selectedMode === "development" ? ["BuilderAgent", "ReviewerAgent"] : ["AssistantAgent"],
+    selectedAgentTeam:
+      selectedMode === "development"
+        ? ["BuilderAgent", "ReviewerAgent"]
+        : selectedMode === "bug_bounty"
+          ? ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"]
+          : ["AssistantAgent"],
     proposal,
     safetyDecision: safetyFixture(),
     verificationResult: proposal.kind === "patch" ? verificationFixture() : undefined,
@@ -73,22 +147,34 @@ function persistRun(tempRoot: string, proposal: TaskModeProposal, selectedMode: 
 }
 
 function contextFixture(selectedMode: AssistantRequestContext["selectedMode"]): AssistantRequestContext {
+  const isDevelopment = selectedMode === "development";
+  const isBugBounty = selectedMode === "bug_bounty";
   return {
-    originalInput: "Create a small app.",
+    originalInput: isBugBounty ? "Prepare an authorized bug bounty scope and evidence plan." : "Create a small app.",
     inferredIntent:
-      selectedMode === "development"
+      isDevelopment
         ? "Plan and propose the smallest safe development step."
-        : "Answer or structure a general assistant request safely.",
+        : isBugBounty
+          ? "Prepare an authorized bug bounty workflow with scope, evidence, and reporting gates."
+          : "Answer or structure a general assistant request safely.",
     selectedMode,
-    confidenceScore: selectedMode === "development" ? 0.95 : 0.62,
+    confidenceScore: isDevelopment || isBugBounty ? 0.95 : 0.62,
     assumptions: ["No external tools are required."],
     requiredCapabilities:
-      selectedMode === "development"
+      isDevelopment
         ? ["read_project_files", "propose_file_changes", "run_tests_placeholder"]
-        : ["answer_general_request"],
+        : isBugBounty
+          ? [
+              "confirm_bug_bounty_scope",
+              "review_program_rules",
+              "map_targets_placeholder",
+              "collect_evidence_placeholder",
+              "draft_finding_report"
+            ]
+          : ["answer_general_request"],
     safetyRequirements: ["Do not modify files without approval."],
-    requiresUserApproval: selectedMode === "development",
-    requiresExternalTools: false,
+    requiresUserApproval: isDevelopment || isBugBounty,
+    requiresExternalTools: isBugBounty,
     rejectedModes: selectedMode === "development" ? ["assistant", "bug_bounty"] : ["development", "bug_bounty"],
     createdAt: "2026-06-27T00:00:00.000Z"
   };
@@ -139,6 +225,36 @@ function assistantProposalFixture(): TaskModeProposal {
     nextActions: ["Review the structured proposal."],
     response: "Hello.",
     suggestedQuestions: ["What outcome should be considered done?"]
+  };
+}
+
+function bugBountyProposalFixture(): TaskModeProposal {
+  return {
+    id: "proposal-cli-bug-bounty",
+    kind: "bug_bounty_review",
+    summary: "Bug bounty review proposal with scope and evidence gates.",
+    riskLevel: "high",
+    requiresApproval: true,
+    assumptions: ["No active testing is performed."],
+    nextActions: ["Review MoochackerAgent's safety guidance."],
+    moochackerAssessment: {
+      agent: "MoochackerAgent",
+      mode: "bug_bounty",
+      scopeStatus: "needs_clarification",
+      safetyLevel: "caution",
+      allowedActions: ["Passive planning only."],
+      blockedActions: ["No live requests."],
+      clarifyingQuestions: ["What assets are in scope?"],
+      evidenceGuidance: ["Use owned test accounts only."],
+      redactionRequirements: ["Redact tokens."],
+      reportingNotes: ["Separate findings from hypotheses."]
+    },
+    scopeGate: ["Confirm the target is in scope and explicitly authorized."],
+    targetMapPlaceholders: ["hosts", "endpoints"],
+    hypotheses: ["Authorization boundary issues."],
+    evidenceLedgerFields: ["lead id", "impact"],
+    reportSections: ["title", "impact", "remediation"],
+    stopConditions: ["Scope, authorization, or program rules are unclear."]
   };
 }
 

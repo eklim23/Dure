@@ -1,7 +1,12 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { AssistantCore } from "@dure/assistant-core";
 import type {
+  ApprovalRecord,
   AssistantRunResult,
+  BugBountyScopeIntake,
+  BugBountyScopeRecord,
   PatchProposal,
   RunPreview,
   TaskMode,
@@ -26,6 +31,33 @@ try {
     process.exit(0);
   }
 
+  if (parsed.command === "approve") {
+    if (!parsed.runId) {
+      throw new Error("approve requires a run id.");
+    }
+    const approval = new RunStore().approveRun(parsed.runId, { reason: parsed.reason });
+    printApproval(approval);
+    process.exit(0);
+  }
+
+  if (parsed.command === "reject") {
+    if (!parsed.runId) {
+      throw new Error("reject requires a run id.");
+    }
+    const approval = new RunStore().rejectRun(parsed.runId, { reason: parsed.reason });
+    printApproval(approval);
+    process.exit(0);
+  }
+
+  if (parsed.command === "scope") {
+    if (!parsed.runId || !parsed.scopeIntake) {
+      throw new Error("scope requires a run id and scope fields.");
+    }
+    const scope = new RunStore().attachBugBountyScope(parsed.runId, { scope: parsed.scopeIntake });
+    printScope(scope);
+    process.exit(0);
+  }
+
   if (!parsed.request) {
     printUsage();
     process.exit(args.length === 0 ? 0 : 1);
@@ -43,9 +75,12 @@ try {
 }
 
 interface ParsedArgs {
-  readonly command?: "run" | "ask" | "preview";
+  readonly command?: "run" | "ask" | "preview" | "approve" | "reject" | "scope";
   readonly request?: string;
   readonly previewRunId?: string;
+  readonly runId?: string;
+  readonly reason?: string;
+  readonly scopeIntake?: BugBountyScopeIntake;
   readonly modeOverride?: TaskMode;
   readonly persist: boolean;
 }
@@ -79,16 +114,21 @@ function parseArgs(tokens: readonly string[]): ParsedArgs {
   }
 
   if (commandOrRequest === "preview") {
-    if (modeOverride) {
-      throw new Error("preview does not support --mode.");
-    }
-    if (!persist) {
-      throw new Error("preview is read-only and does not support --no-persist.");
-    }
+    rejectRunCommandGlobalOptions("preview", modeOverride, persist);
     if (rest.length !== 1 || rest[0].trim().length === 0) {
       throw new Error("preview requires exactly one run id.");
     }
     return { command: "preview", previewRunId: rest[0], persist };
+  }
+
+  if (commandOrRequest === "approve" || commandOrRequest === "reject") {
+    rejectRunCommandGlobalOptions(commandOrRequest, modeOverride, persist);
+    return parseApprovalCommand(commandOrRequest, rest, persist);
+  }
+
+  if (commandOrRequest === "scope") {
+    rejectRunCommandGlobalOptions("scope", modeOverride, persist);
+    return parseScopeCommand(rest, persist);
   }
 
   if (commandOrRequest === "run" || commandOrRequest === "ask") {
@@ -98,6 +138,173 @@ function parseArgs(tokens: readonly string[]): ParsedArgs {
 
   const request = [commandOrRequest, ...rest].join(" ").trim();
   return { request: request.length > 0 ? request : undefined, modeOverride, persist };
+}
+
+function rejectRunCommandGlobalOptions(command: string, modeOverride: TaskMode | undefined, persist: boolean): void {
+  if (modeOverride) {
+    throw new Error(`${command} does not support --mode.`);
+  }
+  if (!persist) {
+    throw new Error(`${command} is read-only or record-only and does not support --no-persist.`);
+  }
+}
+
+function parseApprovalCommand(command: "approve" | "reject", tokens: readonly string[], persist: boolean): ParsedArgs {
+  const [runId, ...rest] = tokens;
+  if (!runId || runId.trim().length === 0) {
+    throw new Error(`${command} requires exactly one run id.`);
+  }
+
+  const options = parseCommandOptions(rest, ["reason"]);
+  return {
+    command,
+    runId,
+    reason: firstOption(options, "reason"),
+    persist
+  };
+}
+
+function parseScopeCommand(tokens: readonly string[], persist: boolean): ParsedArgs {
+  const [runId, ...rest] = tokens;
+  if (!runId || runId.trim().length === 0) {
+    throw new Error("scope requires exactly one run id.");
+  }
+
+  const options = parseCommandOptions(rest, [
+    "scope-file",
+    "target",
+    "in-scope",
+    "out-of-scope",
+    "allowed",
+    "forbidden",
+    "rate-limit",
+    "roles",
+    "data",
+    "authorization-note",
+    "program-rules-url"
+  ]);
+  const fileScope = firstOption(options, "scope-file")
+    ? readScopeFile(firstOption(options, "scope-file") as string)
+    : emptyScope();
+  const scopeIntake: BugBountyScopeIntake = {
+    target: firstOption(options, "target") ?? fileScope.target,
+    inScopeAssets: mergeLists(fileScope.inScopeAssets, listOptions(options, "in-scope")),
+    outOfScopeAssets: mergeLists(fileScope.outOfScopeAssets, listOptions(options, "out-of-scope")),
+    allowedTechniques: mergeLists(fileScope.allowedTechniques, listOptions(options, "allowed")),
+    forbiddenTechniques: mergeLists(fileScope.forbiddenTechniques, listOptions(options, "forbidden")),
+    rateLimits: mergeLists(fileScope.rateLimits, listOptions(options, "rate-limit")),
+    testAccountRoles: mergeLists(fileScope.testAccountRoles, listOptions(options, "roles")),
+    dataHandlingRules: mergeLists(fileScope.dataHandlingRules, listOptions(options, "data")),
+    authorizationNote: firstOption(options, "authorization-note") ?? fileScope.authorizationNote,
+    programRulesUrl: firstOption(options, "program-rules-url") ?? fileScope.programRulesUrl
+  };
+
+  return {
+    command: "scope",
+    runId,
+    scopeIntake,
+    persist
+  };
+}
+
+function parseCommandOptions(tokens: readonly string[], allowed: readonly string[]): Map<string, string[]> {
+  const options = new Map<string, string[]>();
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!token.startsWith("--")) {
+      throw new Error(`Unexpected argument: ${token}`);
+    }
+    const name = token.slice(2);
+    if (!allowed.includes(name)) {
+      throw new Error(`Unknown option: ${token}`);
+    }
+    const value = tokens[index + 1];
+    if (!value || value.startsWith("--")) {
+      throw new Error(`${token} requires a value.`);
+    }
+    const existing = options.get(name) ?? [];
+    options.set(name, [...existing, value]);
+    index += 1;
+  }
+  return options;
+}
+
+function firstOption(options: Map<string, string[]>, name: string): string | undefined {
+  return options.get(name)?.[0];
+}
+
+function listOptions(options: Map<string, string[]>, name: string): readonly string[] {
+  return (options.get(name) ?? []).flatMap(splitList);
+}
+
+function splitList(value: string): readonly string[] {
+  return value.split(",").map((item) => item.trim()).filter((item) => item.length > 0);
+}
+
+function mergeLists(left: readonly string[], right: readonly string[]): readonly string[] {
+  return [...left, ...right].map((item) => item.trim()).filter((item) => item.length > 0);
+}
+
+function readScopeFile(filePath: string): BugBountyScopeIntake {
+  const absolutePath = path.resolve(filePath);
+  try {
+    return coerceScope(JSON.parse(readFileSync(absolutePath, "utf8")) as Record<string, unknown>);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`Malformed scope file: ${absolutePath}`);
+    }
+    throw error;
+  }
+}
+
+function coerceScope(value: Record<string, unknown>): BugBountyScopeIntake {
+  return {
+    target: stringField(value, "target"),
+    inScopeAssets: arrayField(value, "inScopeAssets"),
+    outOfScopeAssets: arrayField(value, "outOfScopeAssets"),
+    allowedTechniques: arrayField(value, "allowedTechniques"),
+    forbiddenTechniques: arrayField(value, "forbiddenTechniques"),
+    rateLimits: arrayField(value, "rateLimits"),
+    testAccountRoles: arrayField(value, "testAccountRoles"),
+    dataHandlingRules: arrayField(value, "dataHandlingRules"),
+    authorizationNote: stringField(value, "authorizationNote"),
+    programRulesUrl: optionalStringField(value, "programRulesUrl")
+  };
+}
+
+function emptyScope(): BugBountyScopeIntake {
+  return {
+    target: "",
+    inScopeAssets: [],
+    outOfScopeAssets: [],
+    allowedTechniques: [],
+    forbiddenTechniques: [],
+    rateLimits: [],
+    testAccountRoles: [],
+    dataHandlingRules: [],
+    authorizationNote: ""
+  };
+}
+
+function stringField(value: Record<string, unknown>, field: string): string {
+  const item = value[field];
+  return typeof item === "string" ? item : "";
+}
+
+function optionalStringField(value: Record<string, unknown>, field: string): string | undefined {
+  const item = stringField(value, field).trim();
+  return item.length > 0 ? item : undefined;
+}
+
+function arrayField(value: Record<string, unknown>, field: string): readonly string[] {
+  const item = value[field];
+  if (Array.isArray(item)) {
+    return item.filter((entry): entry is string => typeof entry === "string");
+  }
+  if (typeof item === "string") {
+    return splitList(item);
+  }
+  return [];
 }
 
 function parseMode(value: string): TaskMode {
@@ -133,6 +340,9 @@ function printUsage(): void {
   console.log('  dure ask "Draft a README for this project"');
   console.log('  dure run "Create a simple login-enabled bulletin board"');
   console.log("  dure preview <run-id>");
+  console.log('  dure approve <run-id> --reason "Reviewed the patch proposal"');
+  console.log('  dure reject <run-id> --reason "Scope is unclear"');
+  console.log('  dure scope <run-id> --target "api.example.com" --in-scope "api.example.com" --forbidden "DoS,brute force"');
 }
 
 function printResult(result: AssistantRunResult): void {
@@ -203,6 +413,51 @@ function printRunPreview(preview: RunPreview): void {
   );
   section("Verification", summarizePreviewVerification(preview.verificationResult));
   section("Next", [preview.metadata.nextRecommendedAction]);
+}
+
+function printApproval(record: ApprovalRecord): void {
+  console.log("Dure Approval");
+  console.log("");
+  section("Run", [
+    `id: ${record.runId}`,
+    `previous status: ${record.previousStatus}`,
+    `new status: ${record.nextStatus}`,
+    `proposal: ${record.proposalId}`
+  ]);
+  section("Decision", [
+    `decision: ${record.decision}`,
+    `decided by: ${record.decidedBy}`,
+    `reason: ${record.reason ?? "not provided"}`,
+    `created at: ${record.createdAt}`
+  ]);
+  section("Next", [record.nextRecommendedAction]);
+}
+
+function printScope(record: BugBountyScopeRecord): void {
+  console.log("Dure Bug Bounty Scope");
+  console.log("");
+  section("Run", [`id: ${record.runId}`, `target: ${record.target}`]);
+  section("Scope", [
+    `status: ${record.moochackerAssessment.scopeStatus}`,
+    `safety: ${record.moochackerAssessment.safetyLevel}`,
+    `in scope: ${formatList(record.inScopeAssets)}`,
+    `out of scope: ${formatList(record.outOfScopeAssets)}`,
+    `allowed: ${formatList(record.allowedTechniques)}`,
+    `forbidden: ${formatList(record.forbiddenTechniques)}`
+  ]);
+  section("Rules", [
+    `rate limits: ${formatList(record.rateLimits)}`,
+    `roles: ${formatList(record.testAccountRoles)}`,
+    `data handling: ${formatList(record.dataHandlingRules)}`,
+    `authorization: ${record.authorizationNote || "not provided"}`,
+    `program rules: ${record.programRulesUrl ?? "not provided"}`
+  ]);
+  section(
+    "Moochacker",
+    record.moochackerAssessment.clarifyingQuestions.length > 0
+      ? record.moochackerAssessment.clarifyingQuestions
+      : ["Scope intake is sufficient for passive planning."]
+  );
 }
 
 function section(title: string, lines: readonly string[]): void {
@@ -286,4 +541,8 @@ function summarizeCheckGroup(checks: readonly VerificationCheck[]): string {
   }
 
   return checks.map((check) => `${check.name} ${check.passed ? "pass" : "fail"}`).join(", ");
+}
+
+function formatList(values: readonly string[]): string {
+  return values.length > 0 ? values.join(", ") : "none";
 }

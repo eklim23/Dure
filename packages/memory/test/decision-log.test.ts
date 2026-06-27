@@ -123,6 +123,133 @@ test("run store reports malformed artifact names", async () => {
   assert.throws(() => store.loadPreview(runId), /Malformed run artifact: proposal\.json/);
 });
 
+test("run store approves a verified patch proposal", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-approve-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: patchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:03.000Z")
+  });
+
+  const approval = store.approveRun(record.id, {
+    reason: "Reviewed preview output.",
+    now: new Date("2026-06-27T00:00:04.000Z")
+  });
+  const preview = store.loadPreview(record.id);
+
+  assert.equal(approval.decision, "approved");
+  assert.equal(approval.reason, "Reviewed preview output.");
+  assert.equal(preview.metadata.status, "approved");
+  assert.equal(preview.approvalRecord?.decision, "approved");
+  assert.ok(preview.artifactPaths.approval);
+  assert.ok(existsSync(preview.artifactPaths.approval));
+  assert.equal(preview.decisionLog.entries.at(-1)?.type, "approval_decision");
+});
+
+test("run store rejects duplicate, non-patch, and unverified approvals", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-approve-reject-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const patchRecord = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: patchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:05.000Z")
+  });
+  const nonPatchRecord = store.persistRun({
+    context: contextFixture(),
+    selectedAgentTeam: ["AssistantAgent"],
+    proposal: proposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review the structured proposal.",
+    now: new Date("2026-06-27T00:00:06.000Z")
+  });
+  const failedRecord = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: patchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(false),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Fix verification failures.",
+    now: new Date("2026-06-27T00:00:07.000Z")
+  });
+
+  store.approveRun(patchRecord.id, { now: new Date("2026-06-27T00:00:08.000Z") });
+
+  assert.throws(() => store.approveRun("../outside"), /Invalid run id/);
+  assert.throws(() => store.approveRun(patchRecord.id), /current status is approved/);
+  assert.throws(() => store.approveRun(nonPatchRecord.id), /not a patch proposal/);
+  assert.throws(() => store.approveRun(failedRecord.id), /verification has not accepted/);
+});
+
+test("run store records bug bounty scope intake", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-scope-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:09.000Z")
+  });
+
+  const scope = store.attachBugBountyScope(record.id, {
+    scope: {
+      target: "api.example.com",
+      inScopeAssets: ["api.example.com", "/v1/*"],
+      outOfScopeAssets: ["admin.example.com"],
+      allowedTechniques: ["read-only authorization checks"],
+      forbiddenTechniques: ["DoS", "brute force"],
+      rateLimits: ["10 requests per minute"],
+      testAccountRoles: ["user", "admin-test"],
+      dataHandlingRules: ["redact tokens and personal data"],
+      authorizationNote: "Program scope supplied by user.",
+      programRulesUrl: "https://example.com/program"
+    },
+    now: new Date("2026-06-27T00:00:10.000Z")
+  });
+  const preview = store.loadPreview(record.id);
+
+  assert.equal(scope.moochackerAssessment.scopeStatus, "sufficient");
+  assert.equal(preview.bugBountyScope?.target, "api.example.com");
+  assert.ok(preview.artifactPaths.scope);
+  assert.ok(existsSync(preview.artifactPaths.scope));
+  assert.equal(preview.decisionLog.entries.at(-1)?.type, "bug_bounty_scope_intake");
+});
+
+test("run store rejects scope intake on non-bug-bounty runs", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-scope-reject-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: patchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:11.000Z")
+  });
+
+  assert.throws(
+    () => store.attachBugBountyScope(record.id, { scope: minimalScopeFixture() }),
+    /not a bug bounty proposal/
+  );
+});
+
 function contextFixture(): AssistantRequestContext {
   return {
     originalInput: "hello",
@@ -212,27 +339,92 @@ function patchProposalFixture(): TaskModeProposal {
   };
 }
 
-function verificationFixture(): VerificationResult {
+function verificationFixture(accepted = true): VerificationResult {
   return {
     patchId: "patch-test",
-    accepted: true,
+    accepted,
     completedAt: "2026-06-27T00:00:00.000Z",
     checks: [
       {
         name: "security_scan",
-        passed: true,
+        passed: accepted,
         mocked: false,
         summary: "No unsafe patch paths detected.",
         details: []
       },
       {
         name: "test",
-        passed: true,
+        passed: accepted,
         mocked: true,
         summary: "Placeholder test gate passed.",
         details: []
       }
     ]
+  };
+}
+
+function bugBountyContextFixture(): AssistantRequestContext {
+  return {
+    ...contextFixture(),
+    originalInput: "Prepare an authorized bug bounty scope and evidence plan.",
+    inferredIntent: "Prepare an authorized bug bounty workflow with scope, evidence, and reporting gates.",
+    selectedMode: "bug_bounty",
+    confidenceScore: 0.95,
+    requiredCapabilities: [
+      "confirm_bug_bounty_scope",
+      "review_program_rules",
+      "map_targets_placeholder",
+      "collect_evidence_placeholder",
+      "draft_finding_report"
+    ],
+    safetyRequirements: ["Confirm target scope and authorization before active testing."],
+    requiresUserApproval: true,
+    requiresExternalTools: true,
+    rejectedModes: ["assistant", "development"]
+  };
+}
+
+function bugBountyProposalFixture(): TaskModeProposal {
+  return {
+    id: "proposal-bug-bounty-test",
+    kind: "bug_bounty_review",
+    summary: "Bug bounty review proposal with scope and evidence gates.",
+    riskLevel: "high",
+    requiresApproval: true,
+    assumptions: ["No active testing is performed."],
+    nextActions: ["Review MoochackerAgent's safety guidance."],
+    moochackerAssessment: {
+      agent: "MoochackerAgent",
+      mode: "bug_bounty",
+      scopeStatus: "needs_clarification",
+      safetyLevel: "caution",
+      allowedActions: ["Passive planning only."],
+      blockedActions: ["No live requests."],
+      clarifyingQuestions: ["What assets are in scope?"],
+      evidenceGuidance: ["Use owned test accounts only."],
+      redactionRequirements: ["Redact tokens."],
+      reportingNotes: ["Separate findings from hypotheses."]
+    },
+    scopeGate: ["Confirm the target is in scope and explicitly authorized."],
+    targetMapPlaceholders: ["hosts", "endpoints"],
+    hypotheses: ["Authorization boundary issues."],
+    evidenceLedgerFields: ["lead id", "impact"],
+    reportSections: ["title", "impact", "remediation"],
+    stopConditions: ["Scope, authorization, or program rules are unclear."]
+  };
+}
+
+function minimalScopeFixture() {
+  return {
+    target: "api.example.com",
+    inScopeAssets: [],
+    outOfScopeAssets: [],
+    allowedTechniques: [],
+    forbiddenTechniques: [],
+    rateLimits: [],
+    testAccountRoles: [],
+    dataHandlingRules: [],
+    authorizationNote: ""
   };
 }
 

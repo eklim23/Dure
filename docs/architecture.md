@@ -33,6 +33,10 @@ User Natural Language Input
    - `dure --mode bug-bounty "request"`
    - `dure ask "request"`
    - `dure run "request"`
+   - `dure preview <run-id>`
+   - `dure approve <run-id>`
+   - `dure reject <run-id>`
+   - `dure scope <run-id>`
 
 2. Assistant Core
 
@@ -72,7 +76,7 @@ User Natural Language Input
 
 8. Controlled Execution
 
-   Development patches are proposals, not automatic edits. Bug Bounty Mode produces scope and evidence plans only until explicit authorization and rules of engagement are known.
+   Development patches are proposals, not automatic edits. `approve` and `reject` create durable approval decisions under `.dure/runs/<run-id>/approval.json`; they do not apply files or execute commands. Bug Bounty Mode produces scope and evidence plans only until explicit authorization and rules of engagement are known.
 
 9. Verification / Safety Gate
 
@@ -84,7 +88,7 @@ User Natural Language Input
 
 11. Memory / Decision Log
 
-   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, and next recommended step.
+   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, approval decisions, bug bounty scope intake, and next recommended step.
 
 ## MVP Ladder For Development Mode
 
@@ -113,6 +117,8 @@ Bug Bounty Mode must record:
 - report sections
 
 Before scope is known, Dure should continue with passive planning only.
+
+Scope intake is persisted as `.dure/runs/<run-id>/scope.json`. It stores only user-provided assets, rules, roles, and data handling expectations. It does not discover endpoints, infer related targets, contact hosts, run scanners, or store credentials.
 
 ## Naming
 

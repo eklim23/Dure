@@ -13,15 +13,17 @@
 - Skill registry stub
 - Decision log / memory
 - Assistant-first CLI
+- Persistent run preview
+- Approval Gate for patch proposals
+- Minimal bug bounty scope intake persistence
 
 ## v0.2
 
 - Real LLM provider interface wiring
 - Project file indexing
-- Bug bounty scope intake and evidence ledger persistence
+- Evidence ledger persistence
 - Richer Development Mode project-state detection
 - Security checklist engine
-- Approval layer for safe local commands
 - Persistent decision logs
 - Configurable policy defaults
 

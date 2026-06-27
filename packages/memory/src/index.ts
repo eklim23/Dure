@@ -2,15 +2,21 @@ import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type {
+  ApprovalDecision,
+  ApprovalRecord,
   AssistantAgentRole,
   AssistantRequestContext,
+  BugBountyScopeIntake,
+  BugBountyScopeRecord,
   DecisionLog,
   DecisionLogEntry,
   DecisionLogEntryType,
+  MoochackerAssessment,
   RunArtifactPaths,
   RunMetadata,
   RunPreview,
   RunRecord,
+  RunStatus,
   SafetyDecision,
   TaskModeProposal,
   VerificationResult
@@ -45,6 +51,16 @@ export interface PersistRunInput {
   readonly verificationResult?: VerificationResult;
   readonly decisionLog: DecisionLog;
   readonly nextRecommendedAction: string;
+  readonly now?: Date;
+}
+
+export interface ApprovalDecisionInput {
+  readonly reason?: string;
+  readonly now?: Date;
+}
+
+export interface AttachBugBountyScopeInput {
+  readonly scope: BugBountyScopeIntake;
   readonly now?: Date;
 }
 
@@ -92,6 +108,7 @@ export class RunStore {
       selectedAgentTeam: input.selectedAgentTeam,
       nextRecommendedAction: input.nextRecommendedAction
     });
+    writeFileSync(artifactPaths.decisionLog, "", { encoding: "utf8", flag: "a" });
     this.appendDecisionEntries(artifactPaths.decisionLog, input.decisionLog.entries);
 
     return record;
@@ -101,13 +118,69 @@ export class RunStore {
     appendJsonLine(run.artifactPaths.decisionLog, entry);
   }
 
+  approveRun(runId: string, input: ApprovalDecisionInput = {}): ApprovalRecord {
+    return this.recordApprovalDecision(runId, "approved", input);
+  }
+
+  rejectRun(runId: string, input: ApprovalDecisionInput = {}): ApprovalRecord {
+    return this.recordApprovalDecision(runId, "rejected", input);
+  }
+
+  attachBugBountyScope(runId: string, input: AttachBugBountyScopeInput): BugBountyScopeRecord {
+    const now = input.now ?? new Date();
+    const preview = this.loadPreview(runId);
+    if (preview.proposal.kind !== "bug_bounty_review") {
+      throw new Error(`Run ${runId} is not a bug bounty proposal (${preview.proposal.kind}).`);
+    }
+    if (preview.metadata.status !== "proposed") {
+      throw new Error(`Run ${runId} cannot accept scope while status is ${preview.metadata.status}.`);
+    }
+    if (preview.artifactPaths.scope && existsSync(preview.artifactPaths.scope)) {
+      throw new Error(`Run ${runId} already has a bug bounty scope intake.`);
+    }
+
+    const scope = normalizeScope(input.scope);
+    const scopePath = path.join(preview.artifactPaths.runDir, "scope.json");
+    const record: BugBountyScopeRecord = {
+      ...scope,
+      runId,
+      recordedBy: "user",
+      createdAt: now.toISOString(),
+      moochackerAssessment: buildScopeMoochackerAssessment(scope)
+    };
+
+    writeJson(scopePath, record);
+    appendJsonLine(preview.artifactPaths.decisionLog, {
+      type: "bug_bounty_scope_intake",
+      message: "Bug bounty scope intake was recorded without active testing.",
+      data: {
+        runId,
+        target: record.target,
+        scopeStatus: record.moochackerAssessment.scopeStatus,
+        safetyLevel: record.moochackerAssessment.safetyLevel,
+        inScopeAssets: record.inScopeAssets,
+        outOfScopeAssets: record.outOfScopeAssets,
+        allowedTechniques: record.allowedTechniques,
+        forbiddenTechniques: record.forbiddenTechniques
+      },
+      timestamp: now.toISOString()
+    } satisfies DecisionLogEntry);
+    this.updateMetadata(preview, preview.metadata.status, now, { hasScope: true });
+
+    return record;
+  }
+
   loadPreview(runId: string): RunPreview {
     if (!isSafeRunId(runId)) {
       throw new Error(`Invalid run id: ${runId}`);
     }
 
     const runDir = path.join(this.root, runId);
-    const artifactPaths = createArtifactPaths(runDir, existsSync(path.join(runDir, "verification.json")));
+    const artifactPaths = createArtifactPaths(runDir, {
+      hasVerification: existsSync(path.join(runDir, "verification.json")),
+      hasApproval: existsSync(path.join(runDir, "approval.json")),
+      hasScope: existsSync(path.join(runDir, "scope.json"))
+    });
     if (!existsSync(artifactPaths.metadata)) {
       throw new Error(`Run not found: ${runId}`);
     }
@@ -123,6 +196,12 @@ export class RunStore {
     const safetyDecision = readJson<SafetyDecision>(artifactPaths.safety);
     const verificationResult = artifactPaths.verification && existsSync(artifactPaths.verification)
       ? readJson<VerificationResult>(artifactPaths.verification)
+      : undefined;
+    const approvalRecord = artifactPaths.approval && existsSync(artifactPaths.approval)
+      ? readJson<ApprovalRecord>(artifactPaths.approval)
+      : undefined;
+    const bugBountyScope = artifactPaths.scope && existsSync(artifactPaths.scope)
+      ? readJson<BugBountyScopeRecord>(artifactPaths.scope)
       : undefined;
     const decisionLog = readDecisionLog(artifactPaths.decisionLog);
 
@@ -147,6 +226,8 @@ export class RunStore {
       proposal,
       safetyDecision,
       verificationResult,
+      approvalRecord,
+      bugBountyScope,
       decisionLog,
       artifactPaths
     };
@@ -171,6 +252,87 @@ export class RunStore {
       appendJsonLine(filePath, entry);
     }
   }
+
+  private recordApprovalDecision(
+    runId: string,
+    decision: ApprovalDecision,
+    input: ApprovalDecisionInput
+  ): ApprovalRecord {
+    const now = input.now ?? new Date();
+    const preview = this.loadPreview(runId);
+    if (preview.metadata.status !== "proposed") {
+      throw new Error(`Run ${runId} cannot be ${decision}; current status is ${preview.metadata.status}.`);
+    }
+    if (preview.artifactPaths.approval && existsSync(preview.artifactPaths.approval)) {
+      throw new Error(`Run ${runId} already has an approval decision.`);
+    }
+    if (decision === "approved") {
+      if (preview.proposal.kind !== "patch") {
+        throw new Error(`Run ${runId} is not a patch proposal (${preview.proposal.kind}).`);
+      }
+      if (preview.proposal.status === "rejected") {
+        throw new Error(`Run ${runId} cannot be approved because the patch proposal is rejected.`);
+      }
+      if (preview.verificationResult?.accepted !== true) {
+        throw new Error(`Run ${runId} cannot be approved because verification has not accepted the proposal.`);
+      }
+    }
+
+    const nextStatus: RunStatus = decision === "approved" ? "approved" : "rejected";
+    const record: ApprovalRecord = {
+      runId,
+      proposalId: preview.metadata.proposalId,
+      decision,
+      decidedBy: "user",
+      reason: cleanOptionalString(input.reason),
+      createdAt: now.toISOString(),
+      previousStatus: preview.metadata.status,
+      nextStatus,
+      nextRecommendedAction:
+        decision === "approved"
+          ? "Proceed to controlled apply in a later stage; no files were changed by approval."
+          : "Record revised requirements before producing a new proposal."
+    };
+
+    writeJson(path.join(preview.artifactPaths.runDir, "approval.json"), record);
+    appendJsonLine(preview.artifactPaths.decisionLog, {
+      type: "approval_decision",
+      message: `User recorded a ${decision} decision for the run.`,
+      data: {
+        runId,
+        proposalId: record.proposalId,
+        decision: record.decision,
+        reason: record.reason,
+        previousStatus: record.previousStatus,
+        nextStatus: record.nextStatus
+      },
+      timestamp: now.toISOString()
+    } satisfies DecisionLogEntry);
+    this.updateMetadata(preview, nextStatus, now, { hasApproval: true });
+
+    return record;
+  }
+
+  private updateMetadata(
+    preview: RunPreview,
+    status: RunStatus,
+    now: Date,
+    options: { readonly hasApproval?: boolean; readonly hasScope?: boolean }
+  ): void {
+    const artifactPaths = createArtifactPaths(preview.artifactPaths.runDir, {
+      hasVerification: preview.artifactPaths.verification !== undefined,
+      hasApproval: options.hasApproval ?? preview.artifactPaths.approval !== undefined,
+      hasScope: options.hasScope ?? preview.artifactPaths.scope !== undefined
+    });
+    const metadata: RunMetadata = {
+      ...preview.metadata,
+      status,
+      updatedAt: now.toISOString(),
+      artifactPaths
+    };
+
+    writeJson(artifactPaths.metadata, metadata);
+  }
 }
 
 export function createRunId(now = new Date()): string {
@@ -186,7 +348,15 @@ export function isSafeRunId(runId: string): boolean {
   return /^run-\d{8}-\d{6}Z-[0-9a-f]{6}$/.test(runId);
 }
 
-function createArtifactPaths(runDir: string, hasVerification: boolean): RunArtifactPaths {
+function createArtifactPaths(
+  runDir: string,
+  options: boolean | {
+    readonly hasVerification?: boolean;
+    readonly hasApproval?: boolean;
+    readonly hasScope?: boolean;
+  }
+): RunArtifactPaths {
+  const normalized = typeof options === "boolean" ? { hasVerification: options } : options;
   return {
     runDir,
     request: path.join(runDir, "request.json"),
@@ -195,7 +365,9 @@ function createArtifactPaths(runDir: string, hasVerification: boolean): RunArtif
     safety: path.join(runDir, "safety.json"),
     decisionLog: path.join(runDir, "decision-log.jsonl"),
     metadata: path.join(runDir, "metadata.json"),
-    verification: hasVerification ? path.join(runDir, "verification.json") : undefined
+    verification: normalized.hasVerification ? path.join(runDir, "verification.json") : undefined,
+    approval: normalized.hasApproval ? path.join(runDir, "approval.json") : undefined,
+    scope: normalized.hasScope ? path.join(runDir, "scope.json") : undefined
   };
 }
 
@@ -241,4 +413,116 @@ function readDecisionLog(filePath: string): DecisionLog {
   } catch {
     throw new Error("Malformed run artifact: decision-log.jsonl.");
   }
+}
+
+function normalizeScope(input: BugBountyScopeIntake): BugBountyScopeIntake {
+  return {
+    target: cleanRequiredString(input.target, "Scope target is required."),
+    inScopeAssets: cleanList(input.inScopeAssets),
+    outOfScopeAssets: cleanList(input.outOfScopeAssets),
+    allowedTechniques: cleanList(input.allowedTechniques),
+    forbiddenTechniques: cleanList(input.forbiddenTechniques),
+    rateLimits: cleanList(input.rateLimits),
+    testAccountRoles: cleanList(input.testAccountRoles),
+    dataHandlingRules: cleanList(input.dataHandlingRules),
+    authorizationNote: cleanOptionalString(input.authorizationNote) ?? "",
+    programRulesUrl: cleanOptionalString(input.programRulesUrl)
+  };
+}
+
+function buildScopeMoochackerAssessment(scope: BugBountyScopeIntake): MoochackerAssessment {
+  const dangerousAllowed = scope.allowedTechniques.some((technique) => hasDangerousSignal(technique));
+  const missingClarifications = [
+    scope.inScopeAssets.length === 0 ? "Which exact assets are in scope?" : undefined,
+    scope.allowedTechniques.length === 0 ? "Which testing techniques are explicitly allowed?" : undefined,
+    scope.forbiddenTechniques.length === 0 ? "Which testing techniques are forbidden?" : undefined,
+    scope.rateLimits.length === 0 ? "What rate limits or automation limits apply?" : undefined,
+    scope.testAccountRoles.length === 0 ? "Which test account roles are authorized?" : undefined,
+    scope.dataHandlingRules.length === 0 ? "What data handling and redaction rules apply?" : undefined,
+    scope.authorizationNote.length === 0 ? "What note confirms authorization or safe harbor?" : undefined
+  ].filter((question): question is string => question !== undefined);
+  const scopeStatus = dangerousAllowed
+    ? "out_of_scope"
+    : missingClarifications.length > 0
+      ? "needs_clarification"
+      : "sufficient";
+  const safetyLevel = dangerousAllowed ? "blocked" : "caution";
+
+  return {
+    agent: "MoochackerAgent",
+    mode: "bug_bounty",
+    scopeStatus,
+    safetyLevel,
+    allowedActions:
+      safetyLevel === "blocked"
+        ? ["Passive scope clarification only.", "Record the unsafe allowed-technique conflict before proceeding."]
+        : [
+            "Use only the user-provided in-scope assets.",
+            "Plan tests only from the explicitly allowed techniques.",
+            "Keep all work passive until a later approved execution stage."
+          ],
+    blockedActions: [
+      ...scope.forbiddenTechniques.map((technique) => `Forbidden by scope: ${technique}`),
+      "No real HTTP requests, scanners, exploit execution, or active testing in this intake step.",
+      "No scope expansion beyond user-provided assets.",
+      "No credentials, secrets, or personal data should be stored in scope intake."
+    ],
+    clarifyingQuestions: missingClarifications,
+    evidenceGuidance: [
+      "Use owned test accounts and benign markers only.",
+      "Record evidence placeholders with role, timestamp, impact, confidence, and scope notes.",
+      "Stop when evidence is sufficient for a safe report."
+    ],
+    redactionRequirements: [
+      "Redact tokens, cookies, passwords, personal data, account identifiers, and internal hostnames.",
+      "Store roles and rules, not credentials.",
+      "Use placeholders for sensitive values."
+    ],
+    reportingNotes: [
+      "Tie severity to program policy and business impact.",
+      "Separate confirmed findings from hypotheses and blind spots.",
+      "Include remediation guidance without overstating confidence."
+    ]
+  };
+}
+
+function cleanRequiredString(value: string, errorMessage: string): string {
+  const cleaned = value.trim();
+  if (cleaned.length === 0) {
+    throw new Error(errorMessage);
+  }
+  return cleaned;
+}
+
+function cleanOptionalString(value: string | undefined): string | undefined {
+  const cleaned = value?.trim();
+  return cleaned && cleaned.length > 0 ? cleaned : undefined;
+}
+
+function cleanList(values: readonly string[]): readonly string[] {
+  return values.map((value) => value.trim()).filter((value) => value.length > 0);
+}
+
+function hasDangerousSignal(value: string): boolean {
+  const normalized = value.toLowerCase();
+  const signals = [
+    "ddos",
+    "dos",
+    "brute force",
+    "credential stuffing",
+    "password spraying",
+    "bypass rate limit",
+    "dump database",
+    "dump data",
+    "destructive",
+    "persistence",
+    "evade detection"
+  ];
+
+  return signals.some((signal) => {
+    if (/^[a-z0-9]+$/.test(signal) && signal.length <= 3) {
+      return new RegExp(`\\b${signal}\\b`, "i").test(normalized);
+    }
+    return normalized.includes(signal);
+  });
 }
