@@ -227,6 +227,11 @@ function summarizeProposal(proposal: TaskModeProposal): readonly string[] {
     case "bug_bounty_review":
       return [
         ...base,
+        `moochacker: scope ${proposal.moochackerAssessment.scopeStatus}, safety ${proposal.moochackerAssessment.safetyLevel}`,
+        `moochacker allowed: ${proposal.moochackerAssessment.allowedActions.join(" | ")}`,
+        `moochacker blocked: ${proposal.moochackerAssessment.blockedActions.join(" | ")}`,
+        `clarifying questions: ${proposal.moochackerAssessment.clarifyingQuestions.length > 0 ? proposal.moochackerAssessment.clarifyingQuestions.join(" | ") : "none"}`,
+        `evidence guidance: ${proposal.moochackerAssessment.evidenceGuidance.join(" | ")}`,
         `scope gate: ${proposal.scopeGate.join(" | ")}`,
         `hypotheses: ${proposal.hypotheses.join(" | ")}`,
         `report sections: ${proposal.reportSections.join(", ")}`

@@ -53,6 +53,7 @@ export type AssistantAgentRole =
   | "RouterAgent"
   | "DocumentationAgent"
   | "BugBountyAgent"
+  | "MoochackerAgent"
   | "ScopeGuardAgent"
   | "EvidenceAgent"
   | "SecurityReviewAgent"
@@ -166,8 +167,26 @@ export interface SecurityReviewProposal extends BaseProposal {
   readonly scanPlaceholders: readonly string[];
 }
 
+export type BugBountyScopeStatus = "sufficient" | "needs_clarification" | "out_of_scope";
+
+export type MoochackerSafetyLevel = "safe" | "caution" | "blocked";
+
+export interface MoochackerAssessment {
+  readonly agent: "MoochackerAgent";
+  readonly mode: "bug_bounty";
+  readonly scopeStatus: BugBountyScopeStatus;
+  readonly safetyLevel: MoochackerSafetyLevel;
+  readonly allowedActions: readonly string[];
+  readonly blockedActions: readonly string[];
+  readonly clarifyingQuestions: readonly string[];
+  readonly evidenceGuidance: readonly string[];
+  readonly redactionRequirements: readonly string[];
+  readonly reportingNotes: readonly string[];
+}
+
 export interface BugBountyReviewProposal extends BaseProposal {
   readonly kind: "bug_bounty_review";
+  readonly moochackerAssessment: MoochackerAssessment;
   readonly scopeGate: readonly string[];
   readonly targetMapPlaceholders: readonly string[];
   readonly hypotheses: readonly string[];

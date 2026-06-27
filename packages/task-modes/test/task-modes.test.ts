@@ -9,6 +9,7 @@ test("development mode reuses the existing patch orchestrator", () => {
   assert.equal(result.proposal.kind, "patch");
   assert.equal(result.verificationResult?.accepted, true);
   assert.ok(result.developmentResult);
+  assert.equal(result.selectedAgentTeam.includes("MoochackerAgent"), false);
 });
 
 test("documentation mode returns a document proposal", () => {
@@ -19,10 +20,40 @@ test("documentation mode returns a document proposal", () => {
 });
 
 test("bug bounty mode returns a scoped review proposal", () => {
-  const result = new TaskModeRunner().execute(context("bug_bounty", "Prepare a bug bounty report"));
+  const result = new TaskModeRunner().execute(
+    context("bug_bounty", "Prepare an authorized bug bounty report for an in scope API with test accounts")
+  );
 
   assert.equal(result.proposal.kind, "bug_bounty_review");
-  assert.deepEqual(result.selectedAgentTeam, ["BugBountyAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"]);
+  assert.deepEqual(result.selectedAgentTeam, [
+    "BugBountyAgent",
+    "MoochackerAgent",
+    "ScopeGuardAgent",
+    "EvidenceAgent",
+    "ReviewerAgent"
+  ]);
+  assert.equal(result.proposal.riskLevel, "high");
+  assert.equal(result.proposal.requiresApproval, true);
+  assert.equal(result.proposal.moochackerAssessment.agent, "MoochackerAgent");
+  assert.equal(result.proposal.moochackerAssessment.scopeStatus, "sufficient");
+  assert.equal(result.proposal.moochackerAssessment.safetyLevel, "caution");
+  assert.ok(result.proposal.scopeGate.some((item) => item.includes("authorized")));
+  assert.ok(result.proposal.stopConditions.some((item) => item.includes("availability")));
+  assert.ok(result.proposal.stopConditions.some((item) => item.includes("personal data")));
+  assert.ok(result.proposal.moochackerAssessment.evidenceGuidance.some((item) => item.includes("minimal-impact")));
+  assert.ok(result.proposal.moochackerAssessment.redactionRequirements.some((item) => item.includes("Redact")));
+});
+
+test("moochacker blocks unsafe bug bounty requests", () => {
+  const result = new TaskModeRunner().execute(
+    context("bug_bounty", "Run a DDoS test and bypass rate limits against an out of scope target")
+  );
+
+  assert.equal(result.proposal.kind, "bug_bounty_review");
+  assert.equal(result.proposal.moochackerAssessment.scopeStatus, "out_of_scope");
+  assert.equal(result.proposal.moochackerAssessment.safetyLevel, "blocked");
+  assert.ok(result.proposal.moochackerAssessment.blockedActions.some((item) => item.includes("denial-of-service")));
+  assert.match(result.nextRecommendedAction, /Do not proceed/);
 });
 
 function context(selectedMode: AssistantRequestContext["selectedMode"], originalInput: string): AssistantRequestContext {

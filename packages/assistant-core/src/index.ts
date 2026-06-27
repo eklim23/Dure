@@ -50,6 +50,11 @@ export class AssistantCore {
       riskLevel: modeResult.proposal.riskLevel,
       requiresApproval: modeResult.proposal.requiresApproval
     });
+    if (modeResult.proposal.kind === "bug_bounty_review") {
+      log.append("agent_comments", "MoochackerAgent produced a structured bug bounty safety assessment.", {
+        moochackerAssessment: modeResult.proposal.moochackerAssessment
+      });
+    }
     log.append("safety_decision", "Safety decision was recorded before any controlled action.", {
       safetyDecision: modeResult.safetyDecision,
       verificationResult: modeResult.verificationResult

@@ -11,6 +11,7 @@ The council is a deterministic group of role-based mock agents in v0.1. Each age
 - `MaintainerAgent`: checks rollback, auditability, and long-term upkeep.
 - `TesterAgent`: requires testability and verification clarity.
 - `ReviewerAgent`: performs final review of plan constraints.
+- `MoochackerAgent`: supports Bug Bounty Mode as a mock ethical hacking safety specialist. It reviews authorization, scope clarity, blocked techniques, evidence handling, redaction requirements, and report quality. In v0.1 it never performs live testing, scanning, exploitation, or external requests.
 
 `BuilderAgent` is not a reviewer. It is part of the writer policy and may create patch proposals only through the controlled builder path.
 

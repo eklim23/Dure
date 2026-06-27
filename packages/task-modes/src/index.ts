@@ -4,6 +4,7 @@ import type {
   BugBountyReviewProposal,
   Capability,
   DocumentProposal,
+  MoochackerAssessment,
   OpsPlanProposal,
   ProductivityPlanProposal,
   RiskLevel,
@@ -26,7 +27,7 @@ export class TaskModeRunner {
       case "bug_bounty":
         return buildStaticModeResult(
           context,
-          ["BugBountyAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+          ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
           buildBugBountyReviewProposal(context)
         );
       case "documentation":
@@ -129,9 +130,13 @@ function buildDocumentProposal(context: AssistantRequestContext): DocumentPropos
 }
 
 function buildBugBountyReviewProposal(context: AssistantRequestContext): BugBountyReviewProposal {
+  const moochackerAssessment = buildMoochackerAssessment(context);
+
   return {
     ...baseProposal(context, "bug_bounty_review", "Bug bounty review proposal with scope and evidence gates.", "high", true),
     kind: "bug_bounty_review",
+    nextActions: buildBugBountyNextActions(moochackerAssessment),
+    moochackerAssessment,
     scopeGate: [
       "Confirm the target is in scope and explicitly authorized.",
       "Capture allowed and forbidden vulnerability classes.",
@@ -184,10 +189,129 @@ function buildBugBountyReviewProposal(context: AssistantRequestContext): BugBoun
     stopConditions: [
       "Scope, authorization, or program rules are unclear.",
       "The next step could affect availability, billing, production data, or other users.",
+      "The next step requires bypassing rate limits, evading detection, persistence, or destructive testing.",
       "Evidence suggests access to real secrets, personal data, or privileged systems.",
       "The issue is proven enough to report safely."
     ]
   };
+}
+
+function buildMoochackerAssessment(context: AssistantRequestContext): MoochackerAssessment {
+  const normalized = context.originalInput.toLowerCase();
+  const dangerousSignals = [
+    "ddos",
+    "dos",
+    "brute force",
+    "credential stuffing",
+    "password spraying",
+    "bypass rate limit",
+    "dump database",
+    "dump data",
+    "steal",
+    "destructive",
+    "persistence",
+    "evade detection",
+    "out of scope",
+    "without permission",
+    "unauthorized"
+  ];
+  const authorizationSignals = [
+    "authorized",
+    "bug bounty",
+    "program",
+    "in scope",
+    "scope",
+    "safe harbor",
+    "test account",
+    "allowed"
+  ];
+  const hasDangerousSignal = dangerousSignals.some((signal) => hasTextSignal(normalized, signal));
+  const hasAuthorizationSignal = authorizationSignals.some((signal) => hasTextSignal(normalized, signal));
+  const scopeStatus = hasDangerousSignal
+    ? "out_of_scope"
+    : hasAuthorizationSignal
+      ? "sufficient"
+      : "needs_clarification";
+  const safetyLevel = hasDangerousSignal ? "blocked" : scopeStatus === "sufficient" ? "caution" : "caution";
+
+  return {
+    agent: "MoochackerAgent",
+    mode: "bug_bounty",
+    scopeStatus,
+    safetyLevel,
+    allowedActions:
+      safetyLevel === "blocked"
+        ? ["Passive clarification only.", "Record why the requested action is blocked."]
+        : [
+            "Review user-provided scope and program rules.",
+            "Draft a target map from authorized artifacts only.",
+            "Prepare minimal-impact hypotheses without sending live requests.",
+            "Draft an evidence ledger and report outline."
+          ],
+    blockedActions: [
+      "No real HTTP requests, browser sessions, scanners, exploit execution, or active testing in v0.1.",
+      "No denial-of-service, brute force, credential attacks, persistence, stealth, or rate-limit bypass.",
+      "No access, collection, alteration, or publication of real user data.",
+      "No testing outside explicitly authorized scope."
+    ],
+    clarifyingQuestions:
+      scopeStatus === "sufficient"
+        ? []
+        : [
+            "What exact assets are in scope?",
+            "Which techniques are allowed and forbidden by the program rules?",
+            "What test account roles are authorized?",
+            "What rate limits, automation limits, and data handling rules apply?"
+          ],
+    evidenceGuidance: [
+      "Use owned test accounts, benign marker values, and reversible actions only.",
+      "Prefer read-only or minimal-impact verification when evidence is enough.",
+      "Record request/response placeholders, auth role, timestamp, impact, confidence, and scope notes.",
+      "Stop once the issue is proven enough to report safely."
+    ],
+    redactionRequirements: [
+      "Redact tokens, cookies, passwords, personal data, internal hostnames, and account identifiers.",
+      "Use placeholders such as [redacted-session-cookie], [test-user-a], and [owned-test-object].",
+      "Keep sensitive evidence local unless the user explicitly asks for a redacted report."
+    ],
+    reportingNotes: [
+      "Separate confirmed findings, hypotheses, tested non-issues, and blind spots.",
+      "Calibrate severity by business impact, exploitability, affected users, required privileges, and program policy.",
+      "Include remediation guidance without overstating confidence."
+    ]
+  };
+}
+
+function hasTextSignal(source: string, signal: string): boolean {
+  if (/^[a-z0-9]+$/.test(signal) && signal.length <= 3) {
+    return new RegExp(`\\b${signal}\\b`, "i").test(source);
+  }
+
+  return source.includes(signal);
+}
+
+function buildBugBountyNextActions(assessment: MoochackerAssessment): readonly string[] {
+  if (assessment.safetyLevel === "blocked") {
+    return [
+      "Do not proceed with active testing.",
+      "Clarify authorization, scope, and program rules before any further bug bounty workflow.",
+      "Record the blocked request and the reason in the decision log."
+    ];
+  }
+
+  if (assessment.scopeStatus === "needs_clarification") {
+    return [
+      "Answer MoochackerAgent's scope and authorization questions.",
+      "Provide in-scope assets, forbidden techniques, rate limits, test roles, and data handling rules.",
+      "Continue with passive planning only until scope is sufficient."
+    ];
+  }
+
+  return [
+    "Review MoochackerAgent's safety guidance.",
+    "Build the target map from authorized artifacts only.",
+    "Record evidence and redactions before drafting a report."
+  ];
 }
 
 function buildSecurityReviewProposal(context: AssistantRequestContext): SecurityReviewProposal {

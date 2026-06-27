@@ -47,7 +47,7 @@ User Natural Language Input
    `packages/task-modes` owns mode-specific deterministic behavior:
 
    - Development Mode returns a `PatchProposal`.
-   - Bug Bounty Mode returns a `BugBountyReviewProposal`.
+   - Bug Bounty Mode returns a `BugBountyReviewProposal` with a structured `MoochackerAgent` safety assessment.
    - Documentation Mode returns a `DocumentProposal`.
    - Security Mode returns a `SecurityReviewProposal`.
    - Operations Mode returns an `OpsPlanProposal`.

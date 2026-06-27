@@ -4,6 +4,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { RunStore } from "@dure/memory";
 import { AssistantCore } from "../src/index";
 
 test("assistant core routes development requests through development mode", () => {
@@ -26,6 +27,16 @@ test("assistant core supports bug bounty mode", () => {
 
   assert.equal(result.context.selectedMode, "bug_bounty");
   assert.equal(result.proposal.kind, "bug_bounty_review");
+  assert.ok(result.selectedAgentTeam.includes("MoochackerAgent"));
+  assert.equal(result.proposal.moochackerAssessment.agent, "MoochackerAgent");
+
+  const teamEntry = result.decisionLog.entries.find((entry) => entry.type === "selected_agent_team");
+  assert.ok(teamEntry);
+  assert.deepEqual(teamEntry.data.selectedAgentTeam, result.selectedAgentTeam);
+
+  const moochackerEntry = result.decisionLog.entries.find((entry) => entry.type === "agent_comments");
+  assert.ok(moochackerEntry);
+  assert.deepEqual(moochackerEntry.data.moochackerAssessment, result.proposal.moochackerAssessment);
 });
 
 test("assistant core supports explicit mode override", () => {
@@ -69,6 +80,28 @@ test("assistant core can persist a run record", async () => {
   assert.equal(result.runRecord.selectedMode, "documentation");
   assert.ok(existsSync(result.runArtifactPaths.metadata));
   assert.ok(existsSync(result.runArtifactPaths.decisionLog));
+});
+
+test("assistant core persists MoochackerAgent in bug bounty run metadata", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "dure-assistant-bug-bounty-runs-"));
+  const runStoreRoot = path.join(root, ".dure", "runs");
+  const result = new AssistantCore().run(
+    "Prepare an authorized bug bounty scope and evidence plan for an in scope API",
+    new Date("2026-06-27T00:00:00.000Z"),
+    {
+      modeOverride: "bug_bounty",
+      persist: true,
+      runStoreRoot
+    }
+  );
+
+  assert.ok(result.runId);
+
+  const preview = new RunStore(runStoreRoot).loadPreview(result.runId);
+
+  assert.ok(preview.metadata.selectedAgentTeam.includes("MoochackerAgent"));
+  assert.equal(preview.proposal.kind, "bug_bounty_review");
+  assert.equal(preview.proposal.moochackerAssessment.agent, "MoochackerAgent");
 });
 
 test("assistant core does not persist when persist is false", async () => {

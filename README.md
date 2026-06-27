@@ -29,7 +29,7 @@ Other assistant capabilities can exist as supporting utilities, but they should 
 ## Primary Modes
 
 - Development Mode: code planning, MVP-first implementation, patch proposal, testing, review
-- Bug Bounty Mode: authorized web security review planning, scope control, endpoint mapping placeholders, evidence ledger scaffolding, report drafting
+- Bug Bounty Mode: authorized web security review planning, scope control, MoochackerAgent safety assessment, endpoint mapping placeholders, evidence ledger scaffolding, report drafting
 
 ## Supporting Modes
 
@@ -169,7 +169,7 @@ examples/                Future example projects
 
 - Agent reasoning is deterministic and rule-based.
 - Task mode routing is keyword/signal based.
-- Bug bounty active testing, target access, and external requests are not executed.
+- MoochackerAgent produces structured bug bounty safety guidance only; active testing, target access, and external requests are not executed.
 - Test, lint, typecheck, and dependency audit checks are placeholders.
 - Operations and productivity integrations are declarations only.
 - Patch proposals are structured data and are not automatically applied.
