@@ -1,5 +1,5 @@
-import type { PatchProposal, VerificationCheck, VerificationResult } from "@aegisforge/core";
-import { ControlledWorkspace } from "@aegisforge/sandbox";
+import type { PatchProposal, VerificationCheck, VerificationResult } from "@dure/core";
+import { ControlledWorkspace } from "@dure/sandbox";
 
 const SECRET_PATTERNS: readonly RegExp[] = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
@@ -22,7 +22,7 @@ export class PatchVerifier {
       ]),
       this.placeholder("typecheck", "Typecheck command placeholder passed.", [
         "No project typecheck command is executed in v0.1.",
-        "AegisForge itself is still typechecked by its package scripts."
+        "Dure itself is still typechecked by its package scripts."
       ]),
       this.securityScan(proposal),
       this.secretScan(proposal),

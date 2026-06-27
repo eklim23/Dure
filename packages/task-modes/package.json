@@ -1,5 +1,5 @@
 {
-  "name": "@aegisforge/task-modes",
+  "name": "@dure/task-modes",
   "version": "0.1.0",
   "description": "Deterministic task mode implementations for the assistant core.",
   "license": "MIT",
@@ -11,7 +11,7 @@
     "test:run": "node --test dist/test/*.test.js"
   },
   "dependencies": {
-    "@aegisforge/core": "workspace:*",
-    "@aegisforge/orchestrator": "workspace:*"
+    "@dure/core": "workspace:*",
+    "@dure/orchestrator": "workspace:*"
   }
 }

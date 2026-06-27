@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AssistantRequestContext } from "@aegisforge/core";
+import type { AssistantRequestContext } from "@dure/core";
 import { TaskModeRunner } from "../src/index";
 
 test("development mode reuses the existing patch orchestrator", () => {
@@ -16,6 +16,13 @@ test("documentation mode returns a document proposal", () => {
 
   assert.equal(result.proposal.kind, "document");
   assert.equal(result.safetyDecision.allowed, true);
+});
+
+test("bug bounty mode returns a scoped review proposal", () => {
+  const result = new TaskModeRunner().execute(context("bug_bounty", "Prepare a bug bounty report"));
+
+  assert.equal(result.proposal.kind, "bug_bounty_review");
+  assert.deepEqual(result.selectedAgentTeam, ["BugBountyAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"]);
 });
 
 function context(selectedMode: AssistantRequestContext["selectedMode"], originalInput: string): AssistantRequestContext {

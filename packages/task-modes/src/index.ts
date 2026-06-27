@@ -1,6 +1,7 @@
 import type {
   AssistantAgentRole,
   AssistantRequestContext,
+  BugBountyReviewProposal,
   Capability,
   DocumentProposal,
   OpsPlanProposal,
@@ -11,17 +12,23 @@ import type {
   TaskModeExecutionResult,
   TaskModeProposal,
   AssistantResponseProposal
-} from "@aegisforge/core";
-import { createStableId } from "@aegisforge/core";
-import { AegisForgeOrchestrator } from "@aegisforge/orchestrator";
+} from "@dure/core";
+import { createStableId } from "@dure/core";
+import { DureOrchestrator } from "@dure/orchestrator";
 
 export class TaskModeRunner {
-  private readonly developmentOrchestrator = new AegisForgeOrchestrator();
+  private readonly developmentOrchestrator = new DureOrchestrator();
 
   execute(context: AssistantRequestContext): TaskModeExecutionResult {
     switch (context.selectedMode) {
       case "development":
         return this.runDevelopmentMode(context);
+      case "bug_bounty":
+        return buildStaticModeResult(
+          context,
+          ["BugBountyAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+          buildBugBountyReviewProposal(context)
+        );
       case "documentation":
         return buildStaticModeResult(context, ["DocumentationAgent", "ReviewerAgent"], buildDocumentProposal(context));
       case "security":
@@ -78,20 +85,28 @@ function buildStaticModeResult(
 }
 
 function buildSafetyDecision(context: AssistantRequestContext): SafetyDecision {
-  const blockedCapabilities = context.requiresExternalTools ? context.requiredCapabilities : [];
+  const blockedCapabilities = context.requiresExternalTools
+    ? context.requiredCapabilities.filter((capability) => capability.endsWith("_placeholder"))
+    : [];
+  const externalToolDetail =
+    context.selectedMode === "bug_bounty"
+      ? "No real target, test account, browser session, scanner, network request, or external service was accessed."
+      : "No real email, calendar, server, shell, network, or cloud resource was accessed.";
+
   return {
     allowed: true,
     requiresApproval: context.requiresUserApproval,
     externalToolsRequired: context.requiresExternalTools,
-    summary: context.requiresExternalTools
-      ? "Only a plan was produced; real external integrations remain blocked in v0.1."
-      : "Safe deterministic proposal produced without external side effects.",
+    summary:
+      context.selectedMode === "bug_bounty"
+        ? "Only passive bug bounty planning was produced; active testing remains blocked in v0.1."
+        : context.requiresExternalTools
+          ? "Only a plan was produced; real external integrations remain blocked in v0.1."
+          : "Safe deterministic proposal produced without external side effects.",
     blockedCapabilities,
     details: [
       ...context.safetyRequirements,
-      context.requiresExternalTools
-        ? "No real email, calendar, server, shell, network, or cloud resource was accessed."
-        : "No external integration was required."
+      context.requiresExternalTools ? externalToolDetail : "No external integration was required."
     ]
   };
 }
@@ -110,6 +125,68 @@ function buildDocumentProposal(context: AssistantRequestContext): DocumentPropos
       "Next review step"
     ],
     contentSummary: "Create reviewable Markdown content without writing files automatically."
+  };
+}
+
+function buildBugBountyReviewProposal(context: AssistantRequestContext): BugBountyReviewProposal {
+  return {
+    ...baseProposal(context, "bug_bounty_review", "Bug bounty review proposal with scope and evidence gates.", "high", true),
+    kind: "bug_bounty_review",
+    scopeGate: [
+      "Confirm the target is in scope and explicitly authorized.",
+      "Capture allowed and forbidden vulnerability classes.",
+      "Record rate limits, automation limits, and denial-of-service restrictions.",
+      "Confirm test accounts, roles, and data handling rules before active testing."
+    ],
+    targetMapPlaceholders: [
+      "hosts",
+      "applications",
+      "API bases",
+      "auth states",
+      "roles",
+      "endpoints",
+      "parameters",
+      "state-changing actions"
+    ],
+    hypotheses: [
+      "Authorization boundary issues such as IDOR or role confusion.",
+      "Input validation issues with low-impact proof markers.",
+      "Session, token, redirect, and file-flow trust boundary issues.",
+      "Duplicate-risk checks before spending effort on common findings."
+    ],
+    evidenceLedgerFields: [
+      "lead id",
+      "status",
+      "asset",
+      "endpoint",
+      "method",
+      "auth state",
+      "user role",
+      "hypothesis",
+      "test performed",
+      "evidence",
+      "impact",
+      "confidence",
+      "program rule notes",
+      "next action"
+    ],
+    reportSections: [
+      "title",
+      "severity",
+      "confidence",
+      "affected asset",
+      "impact",
+      "reproduction",
+      "evidence",
+      "remediation",
+      "limitations and scope notes"
+    ],
+    stopConditions: [
+      "Scope, authorization, or program rules are unclear.",
+      "The next step could affect availability, billing, production data, or other users.",
+      "Evidence suggests access to real secrets, personal data, or privileged systems.",
+      "The issue is proven enough to report safely."
+    ]
   };
 }
 
@@ -169,7 +246,7 @@ function buildAssistantResponseProposal(context: AssistantRequestContext): Assis
     suggestedQuestions: [
       "What outcome should be considered done?",
       "Are there files or systems that must stay untouched?",
-      "Should this become a development, documentation, security, operations, or productivity task?"
+      "Should this become a development or bug bounty task?"
     ]
   };
 }

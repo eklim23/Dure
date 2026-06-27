@@ -6,9 +6,9 @@ import type {
   PatchChange,
   PatchProposal,
   ReviewerRole
-} from "@aegisforge/core";
-import { createStableId } from "@aegisforge/core";
-import { ControlledWorkspace } from "@aegisforge/sandbox";
+} from "@dure/core";
+import { createStableId } from "@dure/core";
+import { ControlledWorkspace } from "@dure/sandbox";
 
 export interface PatchProposalInput {
   readonly writer: AgentRole | "BuilderRuntime";

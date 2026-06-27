@@ -1,5 +1,5 @@
 {
-  "name": "@aegisforge/intent-router",
+  "name": "@dure/intent-router",
   "version": "0.1.0",
   "description": "Deterministic task mode routing for the assistant core.",
   "license": "MIT",
@@ -11,6 +11,6 @@
     "test:run": "node --test dist/test/*.test.js"
   },
   "dependencies": {
-    "@aegisforge/core": "workspace:*"
+    "@dure/core": "workspace:*"
   }
 }

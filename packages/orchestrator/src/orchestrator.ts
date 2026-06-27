@@ -1,12 +1,12 @@
-import { BuilderRuntime } from "@aegisforge/builder-runtime";
-import type { OrchestrationResult } from "@aegisforge/core";
-import { CouncilRunner } from "@aegisforge/council";
-import { DecisionLogRecorder } from "@aegisforge/memory";
-import { PatchVerifier } from "@aegisforge/verifier";
+import { BuilderRuntime } from "@dure/builder-runtime";
+import type { OrchestrationResult } from "@dure/core";
+import { CouncilRunner } from "@dure/council";
+import { DecisionLogRecorder } from "@dure/memory";
+import { PatchVerifier } from "@dure/verifier";
 import { IntentInferenceEngine } from "./intent-inference";
 import { MvpLadder } from "./mvp-ladder";
 
-export class AegisForgeOrchestrator {
+export class DureOrchestrator {
   private readonly inference = new IntentInferenceEngine();
   private readonly council = new CouncilRunner();
   private readonly ladder = new MvpLadder();
@@ -73,7 +73,7 @@ export class AegisForgeOrchestrator {
       ? "Apply the Stage 1 skeleton in a controlled workspace, then replace mocked checks with approved local commands."
       : "Revise the PatchProposal until every verification check passes.";
 
-    log.append("next_recommended_step", "AegisForge selected the next safe action.", {
+    log.append("next_recommended_step", "Dure selected the next safe action.", {
       nextRecommendedAction
     });
 

@@ -7,6 +7,7 @@
 - Deterministic task modes
 - Unified proposal model
 - Development Mode MVP flow
+- Bug Bounty Mode scope/evidence/report proposal flow
 - Single Writer, Multi Reviewer patch policy
 - Verification and safety gates
 - Skill registry stub
@@ -17,7 +18,8 @@
 
 - Real LLM provider interface wiring
 - Project file indexing
-- Richer Documentation Mode
+- Bug bounty scope intake and evidence ledger persistence
+- Richer Development Mode project-state detection
 - Security checklist engine
 - Approval layer for safe local commands
 - Persistent decision logs
@@ -28,7 +30,7 @@
 - Controlled workspace editing
 - Real test execution with approval
 - Local tool adapters
-- Optional personal productivity integrations
+- Minimal-impact bug bounty verification helpers with explicit approval
 - Dependency audit integration with explicit approval
 - Multi-run memory and rollback summaries
 
@@ -39,3 +41,4 @@
 - Signed skills
 - Sandboxed tool execution
 - Team collaboration
+- Optional supporting productivity/documentation integrations

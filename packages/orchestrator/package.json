@@ -1,7 +1,7 @@
 {
-  "name": "@aegisforge/orchestrator",
+  "name": "@dure/orchestrator",
   "version": "0.1.0",
-  "description": "Intent inference and progressive orchestration for AegisForge.",
+  "description": "Intent inference and progressive orchestration for Dure.",
   "license": "MIT",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -11,10 +11,10 @@
     "test:run": "node --test dist/test/*.test.js"
   },
   "dependencies": {
-    "@aegisforge/builder-runtime": "workspace:*",
-    "@aegisforge/core": "workspace:*",
-    "@aegisforge/council": "workspace:*",
-    "@aegisforge/memory": "workspace:*",
-    "@aegisforge/verifier": "workspace:*"
+    "@dure/builder-runtime": "workspace:*",
+    "@dure/core": "workspace:*",
+    "@dure/council": "workspace:*",
+    "@dure/memory": "workspace:*",
+    "@dure/verifier": "workspace:*"
   }
 }

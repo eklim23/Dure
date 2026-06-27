@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { PatchProposal } from "@aegisforge/core";
+import type { PatchProposal } from "@dure/core";
 import { PatchVerifier } from "../src/index";
 
 test("verifier accepts a safe placeholder proposal", () => {

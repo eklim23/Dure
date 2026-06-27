@@ -1,4 +1,4 @@
-import type { MvpStage, MvpStageId } from "@aegisforge/core";
+import type { MvpStage, MvpStageId } from "@dure/core";
 
 export const MVP_LADDER: readonly MvpStage[] = [
   {

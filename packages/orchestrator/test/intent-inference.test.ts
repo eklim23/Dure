@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AegisForgeOrchestrator, IntentInferenceEngine } from "../src/index";
+import { DureOrchestrator, IntentInferenceEngine } from "../src/index";
 
 test("infers a high-risk login-enabled bulletin board goal", () => {
   const engine = new IntentInferenceEngine();
@@ -14,7 +14,7 @@ test("infers a high-risk login-enabled bulletin board goal", () => {
 });
 
 test("orchestrator accepts a verified controlled patch proposal", () => {
-  const orchestrator = new AegisForgeOrchestrator();
+  const orchestrator = new DureOrchestrator();
   const result = orchestrator.run("Create a simple login-enabled bulletin board");
 
   assert.equal(result.selectedNextStep.id, 1);

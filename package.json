@@ -1,8 +1,8 @@
 {
-  "name": "aegisforge-monorepo",
+  "name": "dure-monorepo",
   "version": "0.1.0",
   "private": true,
-  "description": "AegisForge is a secure personal AI assistant and multi-agent task orchestrator.",
+  "description": "Dure is a secure personal AI assistant and multi-agent task orchestrator.",
   "license": "MIT",
   "packageManager": "pnpm@9.15.0",
   "engines": {

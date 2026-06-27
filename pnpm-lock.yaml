@@ -17,37 +17,37 @@ importers:
 
   apps/cli:
     dependencies:
-      '@aegisforge/assistant-core':
+      '@dure/assistant-core':
         specifier: workspace:*
         version: link:../../packages/assistant-core
-      '@aegisforge/core':
+      '@dure/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@aegisforge/orchestrator':
+      '@dure/orchestrator':
         specifier: workspace:*
         version: link:../../packages/orchestrator
 
   packages/assistant-core:
     dependencies:
-      '@aegisforge/core':
+      '@dure/core':
         specifier: workspace:*
         version: link:../core
-      '@aegisforge/intent-router':
+      '@dure/intent-router':
         specifier: workspace:*
         version: link:../intent-router
-      '@aegisforge/memory':
+      '@dure/memory':
         specifier: workspace:*
         version: link:../memory
-      '@aegisforge/task-modes':
+      '@dure/task-modes':
         specifier: workspace:*
         version: link:../task-modes
 
   packages/builder-runtime:
     dependencies:
-      '@aegisforge/core':
+      '@dure/core':
         specifier: workspace:*
         version: link:../core
-      '@aegisforge/sandbox':
+      '@dure/sandbox':
         specifier: workspace:*
         version: link:../sandbox
 
@@ -55,67 +55,67 @@ importers:
 
   packages/council:
     dependencies:
-      '@aegisforge/core':
+      '@dure/core':
         specifier: workspace:*
         version: link:../core
 
   packages/intent-router:
     dependencies:
-      '@aegisforge/core':
+      '@dure/core':
         specifier: workspace:*
         version: link:../core
 
   packages/memory:
     dependencies:
-      '@aegisforge/core':
+      '@dure/core':
         specifier: workspace:*
         version: link:../core
 
   packages/orchestrator:
     dependencies:
-      '@aegisforge/builder-runtime':
+      '@dure/builder-runtime':
         specifier: workspace:*
         version: link:../builder-runtime
-      '@aegisforge/core':
+      '@dure/core':
         specifier: workspace:*
         version: link:../core
-      '@aegisforge/council':
+      '@dure/council':
         specifier: workspace:*
         version: link:../council
-      '@aegisforge/memory':
+      '@dure/memory':
         specifier: workspace:*
         version: link:../memory
-      '@aegisforge/verifier':
+      '@dure/verifier':
         specifier: workspace:*
         version: link:../verifier
 
   packages/sandbox:
     dependencies:
-      '@aegisforge/core':
+      '@dure/core':
         specifier: workspace:*
         version: link:../core
 
   packages/skill-registry:
     dependencies:
-      '@aegisforge/core':
+      '@dure/core':
         specifier: workspace:*
         version: link:../core
 
   packages/task-modes:
     dependencies:
-      '@aegisforge/core':
+      '@dure/core':
         specifier: workspace:*
         version: link:../core
-      '@aegisforge/orchestrator':
+      '@dure/orchestrator':
         specifier: workspace:*
         version: link:../orchestrator
 
   packages/verifier:
     dependencies:
-      '@aegisforge/core':
+      '@dure/core':
         specifier: workspace:*
         version: link:../core
-      '@aegisforge/sandbox':
+      '@dure/sandbox':
         specifier: workspace:*
         version: link:../sandbox
 

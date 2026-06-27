@@ -1,7 +1,7 @@
 {
-  "name": "@aegisforge/sandbox",
+  "name": "@dure/sandbox",
   "version": "0.1.0",
-  "description": "Controlled workspace safety helpers for AegisForge.",
+  "description": "Controlled workspace safety helpers for Dure.",
   "license": "MIT",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -10,6 +10,6 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@aegisforge/core": "workspace:*"
+    "@dure/core": "workspace:*"
   }
 }

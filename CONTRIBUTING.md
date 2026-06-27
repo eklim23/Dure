@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping build AegisForge.
+Thanks for helping build Dure.
 
 ## Principles
 

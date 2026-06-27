@@ -1,7 +1,7 @@
 {
-  "name": "@aegisforge/skill-registry",
+  "name": "@dure/skill-registry",
   "version": "0.1.0",
-  "description": "Previewable skill manifest registry for AegisForge.",
+  "description": "Previewable skill manifest registry for Dure.",
   "license": "MIT",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -11,6 +11,6 @@
     "test:run": "node --test dist/test/*.test.js"
   },
   "dependencies": {
-    "@aegisforge/core": "workspace:*"
+    "@dure/core": "workspace:*"
   }
 }

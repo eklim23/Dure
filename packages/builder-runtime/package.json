@@ -1,7 +1,7 @@
 {
-  "name": "@aegisforge/builder-runtime",
+  "name": "@dure/builder-runtime",
   "version": "0.1.0",
-  "description": "Single-writer patch proposal runtime for AegisForge.",
+  "description": "Single-writer patch proposal runtime for Dure.",
   "license": "MIT",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -11,7 +11,7 @@
     "test:run": "node --test dist/test/*.test.js"
   },
   "dependencies": {
-    "@aegisforge/core": "workspace:*",
-    "@aegisforge/sandbox": "workspace:*"
+    "@dure/core": "workspace:*",
+    "@dure/sandbox": "workspace:*"
   }
 }

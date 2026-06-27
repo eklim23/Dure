@@ -4,7 +4,7 @@ import type {
   GoalState,
   MvpStage,
   ReviewerRole
-} from "@aegisforge/core";
+} from "@dure/core";
 
 interface MockAgent {
   readonly role: ReviewerRole;

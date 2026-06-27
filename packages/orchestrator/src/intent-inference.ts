@@ -1,4 +1,4 @@
-import type { AgentRole, GoalState, RiskLevel } from "@aegisforge/core";
+import type { AgentRole, GoalState, RiskLevel } from "@dure/core";
 import { MvpLadder } from "./mvp-ladder";
 
 const DEFAULT_AGENTS: readonly AgentRole[] = [

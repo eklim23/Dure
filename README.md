@@ -1,10 +1,15 @@
-# AegisForge
+# Dure
 
-AegisForge is a secure personal AI assistant and multi-agent task orchestrator.
+Dure is a secure personal AI assistant and multi-agent task orchestrator focused on two primary workflows: development and authorized bug bounty work.
 
 It understands natural language requests, infers the user's intent, selects the appropriate task mode, forms a role-based agent team when useful, executes only controlled actions, and records decisions for auditability.
 
-Development orchestration is one important mode inside AegisForge. It is not the whole product.
+Dure is intentionally mode-driven. The long-term product should make it easy to choose or infer one of two primary modes:
+
+- Development Mode
+- Bug Bounty Mode
+
+Other assistant capabilities can exist as supporting utilities, but they should not blur the main product direction.
 
 ## v0.1 Scope
 
@@ -12,7 +17,8 @@ Development orchestration is one important mode inside AegisForge. It is not the
 - Intent Router for automatic task mode selection
 - Deterministic task modes with structured proposals
 - Development Mode with the existing MVP-first orchestrator
-- Documentation, Security, Operations, Productivity, and Assistant modes as safe deterministic stubs
+- Bug Bounty Mode with authorization, scope, evidence, and report gates
+- Documentation, Security, Operations, Productivity, and Assistant modes as supporting deterministic stubs
 - Single Writer, Multi Reviewer for development patches
 - Verification and safety gates
 - Decision log / memory
@@ -20,10 +26,14 @@ Development orchestration is one important mode inside AegisForge. It is not the
 - No external API keys required
 - No real email, calendar, server, shell, cloud, or network integrations
 
-## Task Modes
+## Primary Modes
+
+- Development Mode: code planning, MVP-first implementation, patch proposal, testing, review
+- Bug Bounty Mode: authorized web security review planning, scope control, endpoint mapping placeholders, evidence ledger scaffolding, report drafting
+
+## Supporting Modes
 
 - Assistant Mode: general answers, planning, summarization, lightweight help
-- Development Mode: code planning, MVP-first implementation, patch proposal, testing, review
 - Documentation Mode: README, reports, specs, architecture docs, summaries
 - Security Mode: security review, threat modeling, dependency risk, secret scanning placeholders
 - Operations Mode: server/project status review, deployment planning, log review placeholders
@@ -45,6 +55,13 @@ Assistant-first:
 corepack pnpm cli -- "Create a simple login-enabled bulletin board"
 ```
 
+Force one of the primary modes:
+
+```bash
+corepack pnpm cli -- --mode development "Create a simple login-enabled bulletin board"
+corepack pnpm cli -- --mode bug-bounty "Prepare an authorized bug bounty scope and evidence plan"
+```
+
 Explicit assistant command:
 
 ```bash
@@ -60,7 +77,7 @@ corepack pnpm cli -- run "Create a simple login-enabled bulletin board"
 ## Example Output Shape
 
 ```text
-AegisForge v0.1
+Dure v0.1
 
 Original Request:
   - Create a simple login-enabled bulletin board
@@ -81,6 +98,26 @@ Proposal Summary:
 
 Verification Result:
   - patch accepted: yes
+```
+
+Bug bounty example:
+
+```text
+Dure v0.1
+
+Original Request:
+  - Prepare an authorized bug bounty scope and evidence plan
+
+Selected Mode:
+  - bug_bounty
+  - intent: Prepare an authorized bug bounty workflow with scope, evidence, and reporting gates.
+
+Proposal Summary:
+  - proposal-bug-bounty-review-... (bug_bounty_review)
+  - Bug bounty review proposal with scope and evidence gates.
+
+Safety Result:
+  - Only a plan was produced; real external integrations remain blocked in v0.1.
 ```
 
 ## Workspace Layout
@@ -107,6 +144,7 @@ examples/                Future example projects
 
 - Agent reasoning is deterministic and rule-based.
 - Task mode routing is keyword/signal based.
+- Bug bounty active testing, target access, and external requests are not executed.
 - Test, lint, typecheck, and dependency audit checks are placeholders.
 - Operations and productivity integrations are declarations only.
 - Patch proposals are structured data and are not automatically applied.

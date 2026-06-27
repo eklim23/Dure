@@ -1,6 +1,6 @@
 # Threat Model
 
-AegisForge assumes autonomous coding systems can create real security, stability, and maintainability risk if they modify files without review.
+Dure assumes autonomous coding systems can create real security, stability, and maintainability risk if they modify files without review.
 
 ## Assets
 
@@ -10,6 +10,7 @@ AegisForge assumes autonomous coding systems can create real security, stability
 - Git history and audit trail
 - Skill manifests and loaded tools
 - Decision logs
+- Bug bounty scope, evidence, and report drafts
 
 ## Primary Risks
 
@@ -37,6 +38,10 @@ AegisForge assumes autonomous coding systems can create real security, stability
 
    If decisions are not recorded, reviewers cannot understand why a patch exists.
 
+7. Out-of-scope bug bounty testing
+
+   Active testing without explicit authorization, scope, or rules of engagement can harm third-party systems or violate program rules.
+
 ## v0.1 Controls
 
 - Natural language input is converted to a typed `GoalState`.
@@ -48,6 +53,8 @@ AegisForge assumes autonomous coding systems can create real security, stability
 - Secret scanning checks patch content with local patterns.
 - Test, lint, typecheck, and dependency audit commands are placeholders until an approval layer exists.
 - Untrusted skills cannot be loaded automatically.
+- Bug Bounty Mode produces passive plans only until scope and authorization are confirmed.
+- Bug bounty evidence must avoid real user data and redact sensitive artifacts.
 
 ## Out Of Scope In v0.1
 
@@ -56,6 +63,7 @@ AegisForge assumes autonomous coding systems can create real security, stability
 - Real LLM provider calls
 - Automatic application of generated patches
 - Sandboxed execution of skill code
+- Active bug bounty target testing
 
 ## Future Controls
 

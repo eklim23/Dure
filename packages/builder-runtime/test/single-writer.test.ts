@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { CouncilDecision, GoalState, MvpStage } from "@aegisforge/core";
+import type { CouncilDecision, GoalState, MvpStage } from "@dure/core";
 import { BuilderRuntime } from "../src/index";
 
 test("BuilderRuntime can create a controlled patch proposal", () => {

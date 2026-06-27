@@ -1,8 +1,11 @@
-import type { Capability, IntentRoute, TaskMode } from "@aegisforge/core";
+import type { Capability, IntentRoute, TaskMode } from "@dure/core";
+
+export const PRIMARY_MODES: readonly TaskMode[] = ["development", "bug_bounty"];
 
 const ALL_MODES: readonly TaskMode[] = [
   "assistant",
   "development",
+  "bug_bounty",
   "documentation",
   "security",
   "operations",
@@ -12,6 +15,13 @@ const ALL_MODES: readonly TaskMode[] = [
 const CAPABILITIES: Record<TaskMode, readonly Capability[]> = {
   assistant: ["answer_general_request"],
   development: ["read_project_files", "propose_file_changes", "run_tests_placeholder"],
+  bug_bounty: [
+    "confirm_bug_bounty_scope",
+    "review_program_rules",
+    "map_targets_placeholder",
+    "collect_evidence_placeholder",
+    "draft_finding_report"
+  ],
   documentation: ["read_project_files", "generate_document"],
   security: ["read_project_files", "inspect_dependencies_placeholder", "secret_scan_placeholder"],
   operations: ["read_logs_placeholder", "inspect_server_status_placeholder"],
@@ -19,7 +29,18 @@ const CAPABILITIES: Record<TaskMode, readonly Capability[]> = {
 };
 
 const MODE_KEYWORDS: Record<TaskMode, readonly string[]> = {
-  assistant: ["explain", "question", "help", "summarize", "what is", "how do", "설명", "질문", "도와", "요약"],
+  assistant: [
+    "explain",
+    "question",
+    "help",
+    "summarize",
+    "what is",
+    "how do",
+    "\uc124\uba85",
+    "\uc9c8\ubb38",
+    "\ub3c4\uc640",
+    "\uc694\uc57d"
+  ],
   development: [
     "create",
     "build",
@@ -31,13 +52,40 @@ const MODE_KEYWORDS: Record<TaskMode, readonly string[]> = {
     "bulletin",
     "board",
     "feature",
-    "만들",
-    "구현",
-    "코드",
-    "앱",
-    "로그인",
-    "게시판",
-    "기능"
+    "\ub9cc\ub4e4",
+    "\uad6c\ud604",
+    "\ucf54\ub4dc",
+    "\uc571",
+    "\ub85c\uadf8\uc778",
+    "\uac8c\uc2dc\ud310",
+    "\uae30\ub2a5"
+  ],
+  bug_bounty: [
+    "bug bounty",
+    "bug-bounty",
+    "bounty",
+    "burp",
+    "idor",
+    "xss",
+    "ssrf",
+    "csrf",
+    "scope",
+    "program rules",
+    "finding",
+    "poc",
+    "reproduce",
+    "endpoint map",
+    "\ubc84\uadf8\ubc14\uc6b4\ud2f0",
+    "\ucde8\uc57d\uc810",
+    "\uc81c\ubcf4",
+    "\uc2a4\ucf54\ud504",
+    "\ud5c8\uac00",
+    "\uc778\uc99d \ubc94\uc704",
+    "\uc5d4\ub4dc\ud3ec\uc778\ud2b8",
+    "\ub9ac\ud3ec\ud2b8",
+    "\uc99d\uac70",
+    "\uc7ac\ud604",
+    "\uc6f9 \ucde8\uc57d\uc810"
   ],
   documentation: [
     "readme",
@@ -47,12 +95,12 @@ const MODE_KEYWORDS: Record<TaskMode, readonly string[]> = {
     "spec",
     "architecture",
     "draft",
-    "문서",
-    "보고서",
-    "명세",
-    "아키텍처",
-    "초안",
-    "정리"
+    "\ubb38\uc11c",
+    "\ubcf4\uace0\uc11c",
+    "\uba85\uc138",
+    "\uc544\ud0a4\ud14d\ucc98",
+    "\ucd08\uc548",
+    "\uc815\ub9ac"
   ],
   security: [
     "security",
@@ -62,12 +110,12 @@ const MODE_KEYWORDS: Record<TaskMode, readonly string[]> = {
     "secret",
     "dependency",
     "audit",
-    "보안",
-    "위험",
-    "취약",
-    "시크릿",
-    "의존성",
-    "감사"
+    "\ubcf4\uc548",
+    "\uc704\ud5d8",
+    "\ucde8\uc57d",
+    "\uc2dc\ud06c\ub9bf",
+    "\uc758\uc874\uc131",
+    "\uac10\uc0ac"
   ],
   operations: [
     "server",
@@ -77,12 +125,12 @@ const MODE_KEYWORDS: Record<TaskMode, readonly string[]> = {
     "logs",
     "incident",
     "uptime",
-    "서버",
-    "배포",
-    "상태",
-    "로그",
-    "운영",
-    "장애"
+    "\uc11c\ubc84",
+    "\ubc30\ud3ec",
+    "\uc0c1\ud0dc",
+    "\ub85c\uadf8",
+    "\uc6b4\uc601",
+    "\uc7a5\uc560"
   ],
   personal_productivity: [
     "schedule",
@@ -93,29 +141,29 @@ const MODE_KEYWORDS: Record<TaskMode, readonly string[]> = {
     "meeting",
     "presentation",
     "plan my day",
-    "일정",
-    "캘린더",
-    "메일",
-    "이메일",
-    "작업 목록",
-    "할 일",
-    "회의",
-    "발표",
-    "내일"
+    "\uc77c\uc815",
+    "\uce98\ub9b0\ub354",
+    "\uba54\uc77c",
+    "\uc774\uba54\uc77c",
+    "\uc791\uc5c5 \ubaa9\ub85d",
+    "\ud560 \uc77c",
+    "\ud68c\uc758",
+    "\ubc1c\ud45c",
+    "\ub0b4\uc77c"
   ]
 };
 
 export class IntentRouter {
-  route(input: string): IntentRoute {
+  route(input: string, modeOverride?: TaskMode): IntentRoute {
     const normalized = normalizeInput(input);
     const scores = scoreModes(normalized);
-    const selectedMode = selectMode(scores);
-    const selectedScore = scores[selectedMode];
+    const selectedMode = modeOverride ?? selectMode(scores);
+    const selectedScore = modeOverride ? 5 : scores[selectedMode];
 
     return {
       inferredIntent: inferIntent(selectedMode),
       selectedMode,
-      confidenceScore: confidenceFor(selectedMode, selectedScore),
+      confidenceScore: modeOverride ? 1 : confidenceFor(selectedMode, selectedScore),
       assumptions: assumptionsFor(selectedMode),
       requiredCapabilities: CAPABILITIES[selectedMode],
       safetyRequirements: safetyRequirementsFor(selectedMode),
@@ -128,6 +176,10 @@ export class IntentRouter {
 
 export function capabilitiesForMode(mode: TaskMode): readonly Capability[] {
   return CAPABILITIES[mode];
+}
+
+export function isTaskMode(value: string): value is TaskMode {
+  return ALL_MODES.includes(value as TaskMode);
 }
 
 function normalizeInput(input: string): string {
@@ -151,6 +203,10 @@ function scoreModes(input: string): Record<TaskMode, number> {
 
   if (scores.documentation > 0 && scores.development > 0 && input.includes("readme")) {
     scores.documentation += 3;
+  }
+
+  if (scores.bug_bounty > 0 && scores.security > 0) {
+    scores.bug_bounty += 2;
   }
 
   if (scores.security > 0 && input.includes("code")) {
@@ -183,6 +239,8 @@ function inferIntent(mode: TaskMode): string {
       return "Answer or structure a general assistant request safely.";
     case "development":
       return "Plan and propose the smallest safe development step.";
+    case "bug_bounty":
+      return "Prepare an authorized bug bounty workflow with scope, evidence, and reporting gates.";
     case "documentation":
       return "Create or improve documentation as a structured proposal.";
     case "security":
@@ -201,6 +259,12 @@ function assumptionsFor(mode: TaskMode): readonly string[] {
       return [...common, "No external tools are required for the first response."];
     case "development":
       return [...common, "Code changes must remain proposals until explicitly approved."];
+    case "bug_bounty":
+      return [
+        ...common,
+        "Bug bounty work requires explicit authorization and program scope before active testing.",
+        "Dure v0.1 produces passive plans and report scaffolds only."
+      ];
     case "documentation":
       return [...common, "Generated documentation should be reviewable before file writes."];
     case "security":
@@ -218,6 +282,13 @@ function safetyRequirementsFor(mode: TaskMode): readonly string[] {
       return ["Return structured help without external side effects."];
     case "development":
       return ["Use Single Writer, Multi Reviewer.", "Run verification before accepting patch proposals."];
+    case "bug_bounty":
+      return [
+        "Confirm target scope and authorization before active testing.",
+        "Use minimal-impact verification only after approval.",
+        "Do not access, dump, alter, or publish real user data.",
+        "Redact credentials, cookies, tokens, personal data, and internal identifiers."
+      ];
     case "documentation":
       return ["Do not overwrite documents automatically.", "Keep generated content as a proposal."];
     case "security":
@@ -234,5 +305,5 @@ function requiresApproval(mode: TaskMode): boolean {
 }
 
 function requiresExternalTools(mode: TaskMode): boolean {
-  return mode === "operations" || mode === "personal_productivity";
+  return mode === "bug_bounty" || mode === "operations" || mode === "personal_productivity";
 }

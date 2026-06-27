@@ -1,7 +1,7 @@
 {
-  "name": "@aegisforge/assistant-core",
+  "name": "@dure/assistant-core",
   "version": "0.1.0",
-  "description": "Assistant-first request handling for AegisForge.",
+  "description": "Assistant-first request handling for Dure.",
   "license": "MIT",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -11,9 +11,9 @@
     "test:run": "node --test dist/test/*.test.js"
   },
   "dependencies": {
-    "@aegisforge/core": "workspace:*",
-    "@aegisforge/intent-router": "workspace:*",
-    "@aegisforge/memory": "workspace:*",
-    "@aegisforge/task-modes": "workspace:*"
+    "@dure/core": "workspace:*",
+    "@dure/intent-router": "workspace:*",
+    "@dure/memory": "workspace:*",
+    "@dure/task-modes": "workspace:*"
   }
 }

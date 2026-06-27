@@ -3,6 +3,7 @@ export type RiskLevel = "low" | "medium" | "high";
 export type TaskMode =
   | "assistant"
   | "development"
+  | "bug_bounty"
   | "documentation"
   | "security"
   | "operations"
@@ -10,6 +11,7 @@ export type TaskMode =
 
 export type ProposalKind =
   | "patch"
+  | "bug_bounty_review"
   | "document"
   | "security_review"
   | "ops_plan"
@@ -21,6 +23,11 @@ export type Capability =
   | "read_project_files"
   | "propose_file_changes"
   | "run_tests_placeholder"
+  | "confirm_bug_bounty_scope"
+  | "map_targets_placeholder"
+  | "review_program_rules"
+  | "collect_evidence_placeholder"
+  | "draft_finding_report"
   | "generate_document"
   | "inspect_dependencies_placeholder"
   | "secret_scan_placeholder"
@@ -45,6 +52,9 @@ export type AssistantAgentRole =
   | "AssistantAgent"
   | "RouterAgent"
   | "DocumentationAgent"
+  | "BugBountyAgent"
+  | "ScopeGuardAgent"
+  | "EvidenceAgent"
   | "SecurityReviewAgent"
   | "OperationsAgent"
   | "ProductivityAgent";
@@ -156,6 +166,16 @@ export interface SecurityReviewProposal extends BaseProposal {
   readonly scanPlaceholders: readonly string[];
 }
 
+export interface BugBountyReviewProposal extends BaseProposal {
+  readonly kind: "bug_bounty_review";
+  readonly scopeGate: readonly string[];
+  readonly targetMapPlaceholders: readonly string[];
+  readonly hypotheses: readonly string[];
+  readonly evidenceLedgerFields: readonly string[];
+  readonly reportSections: readonly string[];
+  readonly stopConditions: readonly string[];
+}
+
 export interface OpsPlanProposal extends BaseProposal {
   readonly kind: "ops_plan";
   readonly statusAreas: readonly string[];
@@ -178,6 +198,7 @@ export interface AssistantResponseProposal extends BaseProposal {
 
 export type TaskModeProposal =
   | PatchProposal
+  | BugBountyReviewProposal
   | DocumentProposal
   | SecurityReviewProposal
   | OpsPlanProposal

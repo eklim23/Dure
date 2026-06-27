@@ -1,11 +1,12 @@
 {
-  "name": "aegisforge",
+  "name": "dure",
   "version": "0.1.0",
-  "description": "CLI for the AegisForge multi-agent development orchestrator.",
+  "description": "CLI for the Dure development and bug bounty task orchestrator.",
   "license": "MIT",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
   "bin": {
+    "dure": "dist/src/index.js",
     "aegisforge": "dist/src/index.js"
   },
   "files": ["dist"],
@@ -14,8 +15,8 @@
     "start": "node dist/src/index.js"
   },
   "dependencies": {
-    "@aegisforge/assistant-core": "workspace:*",
-    "@aegisforge/core": "workspace:*",
-    "@aegisforge/orchestrator": "workspace:*"
+    "@dure/assistant-core": "workspace:*",
+    "@dure/core": "workspace:*",
+    "@dure/orchestrator": "workspace:*"
   }
 }

@@ -1,6 +1,6 @@
 # Skill Format
 
-AegisForge skills are previewable units of capability. v0.1 supports skill manifests only; it does not execute skill code.
+Dure skills are previewable units of capability. v0.1 supports skill manifests only; it does not execute skill code.
 
 ## Manifest
 

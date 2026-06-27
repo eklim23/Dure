@@ -1,6 +1,6 @@
 # Security
 
-AegisForge is built around conservative agent control.
+Dure is built around conservative agent control.
 
 ## Security Model
 

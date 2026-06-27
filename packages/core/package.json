@@ -1,7 +1,7 @@
 {
-  "name": "@aegisforge/core",
+  "name": "@dure/core",
   "version": "0.1.0",
-  "description": "Shared strict TypeScript types for AegisForge.",
+  "description": "Shared strict TypeScript types for Dure.",
   "license": "MIT",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",

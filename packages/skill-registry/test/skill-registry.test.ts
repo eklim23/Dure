@@ -6,7 +6,7 @@ import test from "node:test";
 import { SkillRegistry } from "../src/index";
 
 test("skill registry previews manifests without loading untrusted skills", async () => {
-  const catalog = await mkdtemp(path.join(tmpdir(), "aegisforge-skills-"));
+  const catalog = await mkdtemp(path.join(tmpdir(), "dure-skills-"));
   const skillDir = path.join(catalog, "security-review-basic");
   await mkdir(skillDir);
   await writeFile(

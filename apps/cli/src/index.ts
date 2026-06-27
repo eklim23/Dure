@@ -1,48 +1,98 @@
 #!/usr/bin/env node
-import { AssistantCore } from "@aegisforge/assistant-core";
+import { AssistantCore } from "@dure/assistant-core";
 import type {
   AssistantRunResult,
   PatchProposal,
+  TaskMode,
   TaskModeProposal,
   VerificationCheck
-} from "@aegisforge/core";
+} from "@dure/core";
 
 const rawArgs = process.argv.slice(2);
 const args = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
-const [commandOrRequest, ...rest] = args;
+const parsed = parseArgs(args);
 
-const request = parseRequest(commandOrRequest, rest);
-if (!request) {
+if (!parsed.request) {
   printUsage();
-  process.exit(commandOrRequest === undefined ? 0 : 1);
+  process.exit(args.length === 0 ? 0 : 1);
 }
 
 const assistant = new AssistantCore();
-const result = assistant.run(request);
+const result = assistant.run(parsed.request, new Date(), { modeOverride: parsed.modeOverride });
 printResult(result);
 
-function parseRequest(commandOrRequest: string | undefined, rest: readonly string[]): string | undefined {
+interface ParsedArgs {
+  readonly request?: string;
+  readonly modeOverride?: TaskMode;
+}
+
+function parseArgs(tokens: readonly string[]): ParsedArgs {
+  const remaining: string[] = [];
+  let modeOverride: TaskMode | undefined;
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === "--mode") {
+      const value = tokens[index + 1];
+      if (!value) {
+        throw new Error("--mode requires a value.");
+      }
+      modeOverride = parseMode(value);
+      index += 1;
+      continue;
+    }
+    remaining.push(token);
+  }
+
+  const [commandOrRequest, ...rest] = remaining;
   if (commandOrRequest === undefined) {
-    return undefined;
+    return { modeOverride };
   }
 
   if (commandOrRequest === "run" || commandOrRequest === "ask") {
     const request = rest.join(" ").trim();
-    return request.length > 0 ? request : undefined;
+    return { request: request.length > 0 ? request : undefined, modeOverride };
   }
 
-  return [commandOrRequest, ...rest].join(" ").trim();
+  const request = [commandOrRequest, ...rest].join(" ").trim();
+  return { request: request.length > 0 ? request : undefined, modeOverride };
+}
+
+function parseMode(value: string): TaskMode {
+  const normalized = value.toLowerCase().replace(/-/g, "_");
+  if (normalized === "dev") {
+    return "development";
+  }
+  if (normalized === "bb" || normalized === "bounty") {
+    return "bug_bounty";
+  }
+
+  const allowed: readonly TaskMode[] = [
+    "assistant",
+    "development",
+    "bug_bounty",
+    "documentation",
+    "security",
+    "operations",
+    "personal_productivity"
+  ];
+  if (allowed.includes(normalized as TaskMode)) {
+    return normalized as TaskMode;
+  }
+
+  throw new Error(`Unknown mode: ${value}`);
 }
 
 function printUsage(): void {
   console.log("Usage:");
-  console.log('  aegisforge "Create a simple login-enabled bulletin board"');
-  console.log('  aegisforge ask "Draft a README for this project"');
-  console.log('  aegisforge run "Create a simple login-enabled bulletin board"');
+  console.log('  dure "Create a simple login-enabled bulletin board"');
+  console.log('  dure --mode bug-bounty "Map scope for an authorized web target"');
+  console.log('  dure ask "Draft a README for this project"');
+  console.log('  dure run "Create a simple login-enabled bulletin board"');
 }
 
 function printResult(result: AssistantRunResult): void {
-  console.log("AegisForge v0.1");
+  console.log("Dure v0.1");
   console.log("");
   section("Original Request", [result.context.originalInput]);
   section("Selected Mode", [
@@ -91,6 +141,13 @@ function summarizeProposal(proposal: TaskModeProposal): readonly string[] {
   switch (proposal.kind) {
     case "patch":
       return [...base, ...summarizePatch(proposal)];
+    case "bug_bounty_review":
+      return [
+        ...base,
+        `scope gate: ${proposal.scopeGate.join(" | ")}`,
+        `hypotheses: ${proposal.hypotheses.join(" | ")}`,
+        `report sections: ${proposal.reportSections.join(", ")}`
+      ];
     case "document":
       return [...base, `title: ${proposal.title}`, `outline: ${proposal.outline.join(" | ")}`];
     case "security_review":

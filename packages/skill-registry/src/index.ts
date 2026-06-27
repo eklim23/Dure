@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import type { SkillManifest, SkillPreview } from "@aegisforge/core";
+import type { SkillManifest, SkillPreview } from "@dure/core";
 
 export interface LoadedSkill {
   readonly manifest: SkillManifest;

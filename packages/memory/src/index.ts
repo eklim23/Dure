@@ -1,4 +1,4 @@
-import type { DecisionLog, DecisionLogEntry, DecisionLogEntryType } from "@aegisforge/core";
+import type { DecisionLog, DecisionLogEntry, DecisionLogEntryType } from "@dure/core";
 
 export class DecisionLogRecorder {
   private readonly entries: DecisionLogEntry[] = [];

@@ -1,7 +1,7 @@
 {
-  "name": "@aegisforge/memory",
+  "name": "@dure/memory",
   "version": "0.1.0",
-  "description": "Decision log memory primitives for AegisForge.",
+  "description": "Decision log memory primitives for Dure.",
   "license": "MIT",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -11,6 +11,6 @@
     "test:run": "node --test dist/test/*.test.js"
   },
   "dependencies": {
-    "@aegisforge/core": "workspace:*"
+    "@dure/core": "workspace:*"
   }
 }

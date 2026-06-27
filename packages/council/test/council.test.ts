@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { GoalState, MvpStage } from "@aegisforge/core";
+import type { GoalState, MvpStage } from "@dure/core";
 import { CouncilRunner } from "../src/index";
 
 test("council emits one structured finding per reviewer role", () => {

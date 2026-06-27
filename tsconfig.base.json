@@ -12,17 +12,17 @@
     "baseUrl": ".",
     "types": ["node"],
     "paths": {
-      "@aegisforge/core": ["packages/core/src/index.ts"],
-      "@aegisforge/council": ["packages/council/src/index.ts"],
-      "@aegisforge/builder-runtime": ["packages/builder-runtime/src/index.ts"],
-      "@aegisforge/verifier": ["packages/verifier/src/index.ts"],
-      "@aegisforge/skill-registry": ["packages/skill-registry/src/index.ts"],
-      "@aegisforge/sandbox": ["packages/sandbox/src/index.ts"],
-      "@aegisforge/memory": ["packages/memory/src/index.ts"],
-      "@aegisforge/orchestrator": ["packages/orchestrator/src/index.ts"],
-      "@aegisforge/intent-router": ["packages/intent-router/src/index.ts"],
-      "@aegisforge/task-modes": ["packages/task-modes/src/index.ts"],
-      "@aegisforge/assistant-core": ["packages/assistant-core/src/index.ts"]
+      "@dure/core": ["packages/core/src/index.ts"],
+      "@dure/council": ["packages/council/src/index.ts"],
+      "@dure/builder-runtime": ["packages/builder-runtime/src/index.ts"],
+      "@dure/verifier": ["packages/verifier/src/index.ts"],
+      "@dure/skill-registry": ["packages/skill-registry/src/index.ts"],
+      "@dure/sandbox": ["packages/sandbox/src/index.ts"],
+      "@dure/memory": ["packages/memory/src/index.ts"],
+      "@dure/orchestrator": ["packages/orchestrator/src/index.ts"],
+      "@dure/intent-router": ["packages/intent-router/src/index.ts"],
+      "@dure/task-modes": ["packages/task-modes/src/index.ts"],
+      "@dure/assistant-core": ["packages/assistant-core/src/index.ts"]
     }
   }
 }

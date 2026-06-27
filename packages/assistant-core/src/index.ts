@@ -1,14 +1,14 @@
-import type { AssistantRequestContext, AssistantRunResult } from "@aegisforge/core";
-import { IntentRouter } from "@aegisforge/intent-router";
-import { DecisionLogRecorder } from "@aegisforge/memory";
-import { TaskModeRunner } from "@aegisforge/task-modes";
+import type { AssistantRequestContext, AssistantRunResult, TaskMode } from "@dure/core";
+import { IntentRouter } from "@dure/intent-router";
+import { DecisionLogRecorder } from "@dure/memory";
+import { TaskModeRunner } from "@dure/task-modes";
 
 export class AssistantCore {
   private readonly router = new IntentRouter();
   private readonly modes = new TaskModeRunner();
 
-  run(input: string, now = new Date()): AssistantRunResult {
-    const route = this.router.route(input);
+  run(input: string, now = new Date(), options: AssistantRunOptions = {}): AssistantRunResult {
+    const route = this.router.route(input, options.modeOverride);
     const context: AssistantRequestContext = {
       originalInput: input,
       inferredIntent: route.inferredIntent,
@@ -69,4 +69,8 @@ export class AssistantCore {
       nextRecommendedAction: modeResult.nextRecommendedAction
     };
   }
+}
+
+export interface AssistantRunOptions {
+  readonly modeOverride?: TaskMode;
 }

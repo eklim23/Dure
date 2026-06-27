@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { PatchProposal } from "@aegisforge/core";
+import type { PatchProposal } from "@dure/core";
 
 export interface PatchSafetyReport {
   readonly safe: boolean;

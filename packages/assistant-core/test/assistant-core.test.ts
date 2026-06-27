@@ -17,6 +17,22 @@ test("assistant core routes documentation requests to document proposals", () =>
   assert.equal(result.proposal.kind, "document");
 });
 
+test("assistant core supports bug bounty mode", () => {
+  const result = new AssistantCore().run("버그바운티 스코프 확인하고 리포트 초안 만들어줘");
+
+  assert.equal(result.context.selectedMode, "bug_bounty");
+  assert.equal(result.proposal.kind, "bug_bounty_review");
+});
+
+test("assistant core supports explicit mode override", () => {
+  const result = new AssistantCore().run("정리해줘", new Date("2026-06-27T00:00:00.000Z"), {
+    modeOverride: "development"
+  });
+
+  assert.equal(result.context.selectedMode, "development");
+  assert.equal(result.proposal.kind, "patch");
+});
+
 test("assistant core records assistant-level decisions", () => {
   const result = new AssistantCore().run("내일 발표 준비할 작업 목록 정리해줘");
 
