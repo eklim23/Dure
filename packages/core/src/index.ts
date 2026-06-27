@@ -282,6 +282,25 @@ export interface RunRecord {
   readonly artifactPaths: RunArtifactPaths;
 }
 
+export interface RunMetadata extends RunRecord {
+  readonly selectedAgentTeam: readonly AssistantAgentRole[];
+  readonly nextRecommendedAction: string;
+}
+
+export interface RunPreview {
+  readonly metadata: RunMetadata;
+  readonly request: {
+    readonly originalInput: string;
+    readonly receivedAt: string;
+  };
+  readonly context: AssistantRequestContext;
+  readonly proposal: TaskModeProposal;
+  readonly safetyDecision: SafetyDecision;
+  readonly verificationResult?: VerificationResult;
+  readonly decisionLog: DecisionLog;
+  readonly artifactPaths: RunArtifactPaths;
+}
+
 export interface SkillManifest {
   readonly name: string;
   readonly version: string;

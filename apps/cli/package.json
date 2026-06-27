@@ -12,11 +12,13 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/src/index.js"
+    "start": "node dist/src/index.js",
+    "test:run": "node --test dist/test/*.test.js"
   },
   "dependencies": {
     "@dure/assistant-core": "workspace:*",
     "@dure/core": "workspace:*",
+    "@dure/memory": "workspace:*",
     "@dure/orchestrator": "workspace:*"
   }
 }

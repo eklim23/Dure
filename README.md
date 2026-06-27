@@ -74,6 +74,14 @@ Backwards-compatible development-style command:
 corepack pnpm cli -- run "Create a simple login-enabled bulletin board"
 ```
 
+Preview a persisted development patch proposal:
+
+```bash
+corepack pnpm cli -- preview <run-id>
+```
+
+The preview command is read-only. It loads `.dure/runs/<run-id>/`, prints the patch summary, proposed file changes, and verification summary, and does not approve, apply, or execute anything.
+
 ## Example Output Shape
 
 ```text
@@ -98,6 +106,23 @@ Proposal Summary:
 
 Verification Result:
   - patch accepted: yes
+```
+
+Patch preview example:
+
+```text
+Dure Preview
+
+Run:
+  - id: run-20260627-000003Z-abc123
+  - mode: development
+  - run status: proposed
+  - proposal: patch-...
+
+Patch:
+  - status: accepted
+  - risk: high
+  - approval required: yes
 ```
 
 Bug bounty example:

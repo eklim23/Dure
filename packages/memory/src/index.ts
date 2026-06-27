@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type {
   AssistantAgentRole,
@@ -8,6 +8,8 @@ import type {
   DecisionLogEntry,
   DecisionLogEntryType,
   RunArtifactPaths,
+  RunMetadata,
+  RunPreview,
   RunRecord,
   SafetyDecision,
   TaskModeProposal,
@@ -99,6 +101,61 @@ export class RunStore {
     appendJsonLine(run.artifactPaths.decisionLog, entry);
   }
 
+  loadPreview(runId: string): RunPreview {
+    if (!isSafeRunId(runId)) {
+      throw new Error(`Invalid run id: ${runId}`);
+    }
+
+    const runDir = path.join(this.root, runId);
+    const artifactPaths = createArtifactPaths(runDir, existsSync(path.join(runDir, "verification.json")));
+    if (!existsSync(artifactPaths.metadata)) {
+      throw new Error(`Run not found: ${runId}`);
+    }
+
+    const metadata = readJson<RunMetadata>(artifactPaths.metadata);
+    if (metadata.id !== runId) {
+      throw new Error(`Malformed run artifact: metadata.json id does not match ${runId}.`);
+    }
+
+    const request = readJson<RunPreview["request"]>(artifactPaths.request);
+    const context = readJson<AssistantRequestContext>(artifactPaths.context);
+    const proposal = readJson<TaskModeProposal>(artifactPaths.proposal);
+    const safetyDecision = readJson<SafetyDecision>(artifactPaths.safety);
+    const verificationResult = artifactPaths.verification && existsSync(artifactPaths.verification)
+      ? readJson<VerificationResult>(artifactPaths.verification)
+      : undefined;
+    const decisionLog = readDecisionLog(artifactPaths.decisionLog);
+
+    return {
+      metadata: {
+        id: metadata.id,
+        status: metadata.status,
+        createdAt: metadata.createdAt,
+        updatedAt: metadata.updatedAt,
+        input: metadata.input,
+        selectedMode: metadata.selectedMode,
+        confidenceScore: metadata.confidenceScore,
+        proposalKind: metadata.proposalKind,
+        proposalId: metadata.proposalId,
+        requiresApproval: metadata.requiresApproval,
+        artifactPaths,
+        selectedAgentTeam: metadata.selectedAgentTeam,
+        nextRecommendedAction: metadata.nextRecommendedAction
+      },
+      request,
+      context,
+      proposal,
+      safetyDecision,
+      verificationResult,
+      decisionLog,
+      artifactPaths
+    };
+  }
+
+  loadRun(runId: string): RunPreview {
+    return this.loadPreview(runId);
+  }
+
   private createUniqueRunId(now: Date): string {
     for (let attempt = 0; attempt < 10; attempt += 1) {
       const candidate = createRunId(now);
@@ -125,6 +182,10 @@ export function createRunId(now = new Date()): string {
   return `run-${timestamp}-${randomBytes(3).toString("hex")}`;
 }
 
+export function isSafeRunId(runId: string): boolean {
+  return /^run-\d{8}-\d{6}Z-[0-9a-f]{6}$/.test(runId);
+}
+
 function createArtifactPaths(runDir: string, hasVerification: boolean): RunArtifactPaths {
   return {
     runDir,
@@ -144,4 +205,40 @@ function writeJson(filePath: string, value: unknown): void {
 
 function appendJsonLine(filePath: string, value: unknown): void {
   appendFileSync(filePath, `${JSON.stringify(value)}\n`, "utf8");
+}
+
+function readJson<T>(filePath: string): T {
+  try {
+    return JSON.parse(readFileSync(filePath, "utf8")) as T;
+  } catch (error) {
+    const fileName = path.basename(filePath);
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`Missing run artifact: ${fileName}.`);
+    }
+    throw new Error(`Malformed run artifact: ${fileName}.`);
+  }
+}
+
+function readDecisionLog(filePath: string): DecisionLog {
+  let source: string;
+  try {
+    source = readFileSync(filePath, "utf8").trim();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error("Missing run artifact: decision-log.jsonl.");
+    }
+    throw error;
+  }
+
+  if (source.length === 0) {
+    return { entries: [] };
+  }
+
+  try {
+    return {
+      entries: source.split("\n").map((line) => JSON.parse(line) as DecisionLogEntry)
+    };
+  } catch {
+    throw new Error("Malformed run artifact: decision-log.jsonl.");
+  }
 }

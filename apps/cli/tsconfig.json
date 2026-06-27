@@ -6,10 +6,11 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "test/**/*.ts"],
   "references": [
     { "path": "../../packages/assistant-core" },
     { "path": "../../packages/core" },
+    { "path": "../../packages/memory" },
     { "path": "../../packages/orchestrator" }
   ]
 }

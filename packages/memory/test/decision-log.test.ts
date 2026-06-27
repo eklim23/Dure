@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { AssistantRequestContext, SafetyDecision, TaskModeProposal } from "@dure/core";
+import type { AssistantRequestContext, SafetyDecision, TaskModeProposal, VerificationResult } from "@dure/core";
 import { createRunId, DecisionLogRecorder, RunStore } from "../src/index";
 
 test("decision log records typed entries in order", () => {
@@ -65,6 +65,64 @@ test("run store persists parseable run artifacts and JSONL decisions", async () 
   );
 });
 
+test("run store loads a persisted development patch preview", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-preview-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const log = new DecisionLogRecorder();
+  log.append("original_user_input", "Input recorded.", { originalInput: "Create a small app." });
+  log.append("proposal_produced", "Patch proposal recorded.", { proposalKind: "patch" });
+
+  const record = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["IntentAgent", "ProductAgent", "BuilderAgent", "ReviewerAgent"],
+    proposal: patchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: log.toDecisionLog(),
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:02.000Z")
+  });
+
+  const preview = store.loadPreview(record.id);
+
+  assert.equal(preview.metadata.id, record.id);
+  assert.equal(preview.metadata.selectedMode, "development");
+  assert.equal(preview.metadata.proposalKind, "patch");
+  assert.equal(preview.metadata.nextRecommendedAction, "Preview the patch before approval.");
+  assert.equal(preview.request.originalInput, "Create a small app.");
+  assert.equal(preview.proposal.kind, "patch");
+  assert.equal(preview.proposal.changes[0].path, "package.json");
+  assert.equal(preview.verificationResult?.accepted, true);
+  assert.equal(preview.decisionLog.entries.length, 2);
+  assert.ok(preview.artifactPaths.runDir.endsWith(record.id));
+});
+
+test("run store rejects unsafe and missing run ids", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-preview-missing-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+
+  assert.throws(() => store.loadPreview("../outside"), /Invalid run id/);
+  assert.throws(() => store.loadPreview("run-20260627-000000Z-ffffff"), /Run not found/);
+});
+
+test("run store reports malformed artifact names", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-preview-bad-"));
+  const runId = "run-20260627-000000Z-abcdef";
+  const runDir = path.join(tempRoot, ".dure", "runs", runId);
+  await mkdir(runDir, { recursive: true });
+
+  await writeFile(path.join(runDir, "metadata.json"), `${JSON.stringify(metadataFixture(runId))}\n`, "utf8");
+  await writeFile(path.join(runDir, "request.json"), `${JSON.stringify({ originalInput: "hello", receivedAt: "2026-06-27T00:00:00.000Z" })}\n`, "utf8");
+  await writeFile(path.join(runDir, "context.json"), `${JSON.stringify(contextFixture())}\n`, "utf8");
+  await writeFile(path.join(runDir, "proposal.json"), "{not-json", "utf8");
+  await writeFile(path.join(runDir, "safety.json"), `${JSON.stringify(safetyFixture())}\n`, "utf8");
+  await writeFile(path.join(runDir, "decision-log.jsonl"), "", "utf8");
+
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+
+  assert.throws(() => store.loadPreview(runId), /Malformed run artifact: proposal\.json/);
+});
+
 function contextFixture(): AssistantRequestContext {
   return {
     originalInput: "hello",
@@ -103,5 +161,103 @@ function safetyFixture(): SafetyDecision {
     summary: "Safe deterministic proposal produced without external side effects.",
     blockedCapabilities: [],
     details: ["No external integration was required."]
+  };
+}
+
+function developmentContextFixture(): AssistantRequestContext {
+  return {
+    ...contextFixture(),
+    originalInput: "Create a small app.",
+    inferredIntent: "Plan and propose the smallest safe development step.",
+    selectedMode: "development",
+    confidenceScore: 0.95,
+    requiredCapabilities: ["read_project_files", "propose_file_changes", "run_tests_placeholder"],
+    safetyRequirements: ["Patch proposals require review before file changes."],
+    requiresUserApproval: true,
+    rejectedModes: ["assistant", "bug_bounty"]
+  };
+}
+
+function patchProposalFixture(): TaskModeProposal {
+  return {
+    id: "patch-test",
+    kind: "patch",
+    summary: "Controlled proposal for a minimal executable skeleton.",
+    riskLevel: "medium",
+    requiresApproval: true,
+    assumptions: ["No files are modified automatically."],
+    nextActions: ["Preview the patch before approval."],
+    author: "BuilderRuntime",
+    goal: "Create a small app.",
+    stage: {
+      id: 1,
+      name: "create executable skeleton",
+      objective: "Create a runnable skeleton before expanding features.",
+      exitCriteria: ["A minimal command can run."]
+    },
+    changes: [
+      {
+        path: "package.json",
+        operation: "create",
+        rationale: "Declare a minimal runnable package."
+      }
+    ],
+    policy: {
+      singleWriter: true,
+      writer: "BuilderRuntime",
+      reviewers: ["ReviewerAgent"]
+    },
+    createdAt: "2026-06-27T00:00:00.000Z",
+    status: "accepted"
+  };
+}
+
+function verificationFixture(): VerificationResult {
+  return {
+    patchId: "patch-test",
+    accepted: true,
+    completedAt: "2026-06-27T00:00:00.000Z",
+    checks: [
+      {
+        name: "security_scan",
+        passed: true,
+        mocked: false,
+        summary: "No unsafe patch paths detected.",
+        details: []
+      },
+      {
+        name: "test",
+        passed: true,
+        mocked: true,
+        summary: "Placeholder test gate passed.",
+        details: []
+      }
+    ]
+  };
+}
+
+function metadataFixture(runId: string) {
+  return {
+    id: runId,
+    status: "proposed",
+    createdAt: "2026-06-27T00:00:00.000Z",
+    updatedAt: "2026-06-27T00:00:00.000Z",
+    input: "hello",
+    selectedMode: "assistant",
+    confidenceScore: 0.62,
+    proposalKind: "assistant_response",
+    proposalId: "proposal-test",
+    requiresApproval: false,
+    artifactPaths: {
+      runDir: "ignored",
+      request: "ignored",
+      context: "ignored",
+      proposal: "ignored",
+      safety: "ignored",
+      decisionLog: "ignored",
+      metadata: "ignored"
+    },
+    selectedAgentTeam: ["AssistantAgent"],
+    nextRecommendedAction: "Review the structured proposal."
   };
 }

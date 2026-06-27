@@ -3,21 +3,34 @@ import { AssistantCore } from "@dure/assistant-core";
 import type {
   AssistantRunResult,
   PatchProposal,
+  RunPreview,
   TaskMode,
   TaskModeProposal,
-  VerificationCheck
+  VerificationCheck,
+  VerificationResult
 } from "@dure/core";
+import { RunStore } from "@dure/memory";
 
 const rawArgs = process.argv.slice(2);
 const args = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
-const parsed = parseArgs(args);
-
-if (!parsed.request) {
-  printUsage();
-  process.exit(args.length === 0 ? 0 : 1);
-}
 
 try {
+  const parsed = parseArgs(args);
+
+  if (parsed.command === "preview") {
+    if (!parsed.previewRunId) {
+      throw new Error("preview requires a run id.");
+    }
+    const preview = new RunStore().loadPreview(parsed.previewRunId);
+    printRunPreview(preview);
+    process.exit(0);
+  }
+
+  if (!parsed.request) {
+    printUsage();
+    process.exit(args.length === 0 ? 0 : 1);
+  }
+
   const assistant = new AssistantCore();
   const result = assistant.run(parsed.request, new Date(), {
     modeOverride: parsed.modeOverride,
@@ -30,7 +43,9 @@ try {
 }
 
 interface ParsedArgs {
+  readonly command?: "run" | "ask" | "preview";
   readonly request?: string;
+  readonly previewRunId?: string;
   readonly modeOverride?: TaskMode;
   readonly persist: boolean;
 }
@@ -63,9 +78,22 @@ function parseArgs(tokens: readonly string[]): ParsedArgs {
     return { modeOverride, persist };
   }
 
+  if (commandOrRequest === "preview") {
+    if (modeOverride) {
+      throw new Error("preview does not support --mode.");
+    }
+    if (!persist) {
+      throw new Error("preview is read-only and does not support --no-persist.");
+    }
+    if (rest.length !== 1 || rest[0].trim().length === 0) {
+      throw new Error("preview requires exactly one run id.");
+    }
+    return { command: "preview", previewRunId: rest[0], persist };
+  }
+
   if (commandOrRequest === "run" || commandOrRequest === "ask") {
     const request = rest.join(" ").trim();
-    return { request: request.length > 0 ? request : undefined, modeOverride, persist };
+    return { command: commandOrRequest, request: request.length > 0 ? request : undefined, modeOverride, persist };
   }
 
   const request = [commandOrRequest, ...rest].join(" ").trim();
@@ -104,6 +132,7 @@ function printUsage(): void {
   console.log('  dure --no-persist "Temporary dry conversation"');
   console.log('  dure ask "Draft a README for this project"');
   console.log('  dure run "Create a simple login-enabled bulletin board"');
+  console.log("  dure preview <run-id>");
 }
 
 function printResult(result: AssistantRunResult): void {
@@ -142,6 +171,38 @@ function printResult(result: AssistantRunResult): void {
   }
 
   section("Next Recommended Action", [result.nextRecommendedAction]);
+}
+
+function printRunPreview(preview: RunPreview): void {
+  if (preview.proposal.kind !== "patch") {
+    throw new Error(`Run ${preview.metadata.id} is not a development patch proposal (${preview.proposal.kind}).`);
+  }
+
+  const proposal = preview.proposal;
+  console.log("Dure Preview");
+  console.log("");
+  section("Run", [
+    `id: ${preview.metadata.id}`,
+    `mode: ${preview.metadata.selectedMode}`,
+    `run status: ${preview.metadata.status}`,
+    `proposal: ${preview.metadata.proposalId}`,
+    `request: ${preview.request.originalInput}`
+  ]);
+  section("Patch", [
+    `status: ${proposal.status}`,
+    `risk: ${proposal.riskLevel}`,
+    `approval required: ${proposal.requiresApproval ? "yes" : "no"}`,
+    `author: ${proposal.author}`,
+    `stage: ${proposal.stage.id} - ${proposal.stage.name}`,
+    `goal: ${proposal.goal}`
+  ]);
+  section("Summary", [proposal.summary]);
+  section(
+    "Changes",
+    proposal.changes.map((change) => `${change.operation}: ${change.path} - ${change.rationale}`)
+  );
+  section("Verification", summarizePreviewVerification(preview.verificationResult));
+  section("Next", [preview.metadata.nextRecommendedAction]);
 }
 
 function section(title: string, lines: readonly string[]): void {
@@ -198,4 +259,26 @@ function summarizeChecks(checks: readonly VerificationCheck[], accepted: boolean
       return `${check.name}: ${check.passed ? "pass" : "fail"} (${mode}) - ${check.summary}`;
     })
   ];
+}
+
+function summarizePreviewVerification(result: VerificationResult | undefined): readonly string[] {
+  if (!result) {
+    return ["not recorded"];
+  }
+
+  const local = summarizeCheckGroup(result.checks.filter((check) => !check.mocked));
+  const mocked = summarizeCheckGroup(result.checks.filter((check) => check.mocked));
+  return [
+    `accepted: ${result.accepted ? "yes" : "no"}`,
+    `local: ${local}`,
+    `mocked: ${mocked}`
+  ];
+}
+
+function summarizeCheckGroup(checks: readonly VerificationCheck[]): string {
+  if (checks.length === 0) {
+    return "none";
+  }
+
+  return checks.map((check) => `${check.name} ${check.passed ? "pass" : "fail"}`).join(", ");
 }
