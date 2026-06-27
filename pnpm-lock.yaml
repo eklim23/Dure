@@ -73,6 +73,9 @@ importers:
       '@dure/core':
         specifier: workspace:*
         version: link:../core
+      '@dure/verifier':
+        specifier: workspace:*
+        version: link:../verifier
 
   packages/orchestrator:
     dependencies:

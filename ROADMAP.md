@@ -16,6 +16,7 @@
 - Persistent run preview
 - Approval Gate for patch proposals
 - Controlled apply into a safe workspace
+- Applied workspace verification with allow-listed package scripts
 - Minimal bug bounty scope intake persistence
 
 ## v0.2
@@ -27,11 +28,11 @@
 - Security checklist engine
 - Persistent decision logs
 - Configurable policy defaults
+- Verification UX polish and richer summaries
 
 ## v0.3
 
 - Controlled workspace editing
-- Real test execution with approval
 - Rollback command using Stage 7 rollback metadata
 - Local tool adapters
 - Minimal-impact bug bounty verification helpers with explicit approval

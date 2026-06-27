@@ -3,10 +3,10 @@
   "references": [
     { "path": "./packages/core" },
     { "path": "./packages/sandbox" },
+    { "path": "./packages/verifier" },
     { "path": "./packages/memory" },
     { "path": "./packages/council" },
     { "path": "./packages/builder-runtime" },
-    { "path": "./packages/verifier" },
     { "path": "./packages/skill-registry" },
     { "path": "./packages/orchestrator" },
     { "path": "./packages/intent-router" },

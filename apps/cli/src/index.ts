@@ -13,7 +13,9 @@ import type {
   TaskMode,
   TaskModeProposal,
   VerificationCheck,
-  VerificationResult
+  VerificationResult,
+  WorkspaceVerificationRecord,
+  WorkspaceVerificationScriptName
 } from "@dure/core";
 import { RunStore } from "@dure/memory";
 
@@ -68,6 +70,19 @@ try {
     process.exit(0);
   }
 
+  if (parsed.command === "verify") {
+    if (!parsed.runId) {
+      throw new Error("verify requires a run id.");
+    }
+    const verification = new RunStore().verifyRun(parsed.runId, {
+      workspaceRoot: parsed.workspaceRoot,
+      scripts: parsed.verificationScripts,
+      timeoutMs: parsed.timeoutMs
+    });
+    printWorkspaceVerification(verification);
+    process.exit(verification.accepted ? 0 : 1);
+  }
+
   if (!parsed.request) {
     printUsage();
     process.exit(args.length === 0 ? 0 : 1);
@@ -85,12 +100,14 @@ try {
 }
 
 interface ParsedArgs {
-  readonly command?: "run" | "ask" | "preview" | "approve" | "reject" | "scope" | "apply";
+  readonly command?: "run" | "ask" | "preview" | "approve" | "reject" | "scope" | "apply" | "verify";
   readonly request?: string;
   readonly previewRunId?: string;
   readonly runId?: string;
   readonly reason?: string;
   readonly workspaceRoot?: string;
+  readonly verificationScripts?: readonly WorkspaceVerificationScriptName[];
+  readonly timeoutMs?: number;
   readonly scopeIntake?: BugBountyScopeIntake;
   readonly modeOverride?: TaskMode;
   readonly persist: boolean;
@@ -145,6 +162,11 @@ function parseArgs(tokens: readonly string[]): ParsedArgs {
   if (commandOrRequest === "apply") {
     rejectRunCommandGlobalOptions("apply", modeOverride, persist);
     return parseApplyCommand(rest, persist);
+  }
+
+  if (commandOrRequest === "verify") {
+    rejectRunCommandGlobalOptions("verify", modeOverride, persist);
+    return parseVerifyCommand(rest, persist);
   }
 
   if (commandOrRequest === "run" || commandOrRequest === "ask") {
@@ -238,6 +260,32 @@ function parseApplyCommand(tokens: readonly string[], persist: boolean): ParsedA
   };
 }
 
+function parseVerifyCommand(tokens: readonly string[], persist: boolean): ParsedArgs {
+  const [runId, ...rest] = tokens;
+  if (!runId || runId.trim().length === 0) {
+    throw new Error("verify requires exactly one run id.");
+  }
+
+  const options = parseCommandOptions(rest, ["workspace", "script", "timeout-ms"]);
+  const timeoutMsValue = firstOption(options, "timeout-ms");
+  let timeoutMs: number | undefined;
+  if (timeoutMsValue !== undefined) {
+    const parsedTimeoutMs = Number.parseInt(timeoutMsValue, 10);
+    if (!Number.isInteger(parsedTimeoutMs) || parsedTimeoutMs <= 0) {
+      throw new Error("--timeout-ms requires a positive integer value.");
+    }
+    timeoutMs = parsedTimeoutMs;
+  }
+  return {
+    command: "verify",
+    runId,
+    workspaceRoot: firstOption(options, "workspace"),
+    verificationScripts: parseVerificationScripts(listOptions(options, "script")),
+    timeoutMs,
+    persist
+  };
+}
+
 function parseCommandOptions(tokens: readonly string[], allowed: readonly string[]): Map<string, string[]> {
   const options = new Map<string, string[]>();
   for (let index = 0; index < tokens.length; index += 1) {
@@ -274,6 +322,21 @@ function splitList(value: string): readonly string[] {
 
 function mergeLists(left: readonly string[], right: readonly string[]): readonly string[] {
   return [...left, ...right].map((item) => item.trim()).filter((item) => item.length > 0);
+}
+
+function parseVerificationScripts(values: readonly string[]): readonly WorkspaceVerificationScriptName[] | undefined {
+  if (values.length === 0) {
+    return undefined;
+  }
+  return [...new Set(values.map(parseVerificationScript))];
+}
+
+function parseVerificationScript(value: string): WorkspaceVerificationScriptName {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "test" || normalized === "lint" || normalized === "typecheck") {
+    return normalized;
+  }
+  throw new Error(`Unsupported verification script: ${value}. Allowed scripts: test, lint, typecheck.`);
 }
 
 function readScopeFile(filePath: string): BugBountyScopeIntake {
@@ -374,6 +437,7 @@ function printUsage(): void {
   console.log('  dure approve <run-id> --reason "Reviewed the patch proposal"');
   console.log('  dure reject <run-id> --reason "Scope is unclear"');
   console.log('  dure apply <run-id> --workspace ".dure/workspaces/<run-id>"');
+  console.log("  dure verify <run-id> --script test --timeout-ms 30000");
   console.log('  dure scope <run-id> --target "api.example.com" --in-scope "api.example.com" --forbidden "DoS,brute force"');
 }
 
@@ -444,6 +508,9 @@ function printRunPreview(preview: RunPreview): void {
     proposal.changes.map((change) => `${change.operation}: ${change.path} - ${change.rationale}`)
   );
   section("Verification", summarizePreviewVerification(preview.verificationResult));
+  if (preview.workspaceVerificationRecord) {
+    section("Workspace Verification", summarizeWorkspaceVerification(preview.workspaceVerificationRecord));
+  }
   section("Next", [preview.metadata.nextRecommendedAction]);
 }
 
@@ -510,6 +577,31 @@ function printApply(record: ApplyRecord): void {
     "metadata: apply.json and rollback.json",
     `backups: ${record.backupRoot}`
   ]);
+  section("Next", [record.nextRecommendedAction]);
+}
+
+function printWorkspaceVerification(record: WorkspaceVerificationRecord): void {
+  console.log("Dure Verification");
+  console.log("");
+  section("Run", [
+    `id: ${record.runId}`,
+    `previous status: ${record.previousStatus}`,
+    `new status: ${record.nextStatus}`,
+    `proposal: ${record.proposalId}`,
+    `accepted: ${record.accepted ? "yes" : "no"}`
+  ]);
+  section("Workspace", [`root: ${record.workspaceRoot}`, `package manager: ${record.packageManager}`]);
+  section(
+    "Commands",
+    record.commands.map((command) => {
+      const exit = command.exitCode === undefined ? "exit n/a" : `exit ${command.exitCode}`;
+      return `${command.name}: ${command.status} (${exit}, ${command.durationMs}ms)`;
+    })
+  );
+  section(
+    "Local Checks",
+    record.localChecks.map((check) => `${check.name}: ${check.passed ? "pass" : "fail"} (${check.mocked ? "mocked" : "local"}) - ${check.summary}`)
+  );
   section("Next", [record.nextRecommendedAction]);
 }
 
@@ -585,6 +677,14 @@ function summarizePreviewVerification(result: VerificationResult | undefined): r
     `accepted: ${result.accepted ? "yes" : "no"}`,
     `local: ${local}`,
     `mocked: ${mocked}`
+  ];
+}
+
+function summarizeWorkspaceVerification(result: WorkspaceVerificationRecord): readonly string[] {
+  return [
+    `accepted: ${result.accepted ? "yes" : "no"}`,
+    `status: ${result.previousStatus} -> ${result.nextStatus}`,
+    ...result.commands.map((command) => `${command.name}: ${command.status}`)
   ];
 }
 

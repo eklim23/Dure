@@ -100,6 +100,15 @@ corepack pnpm cli -- apply <run-id> --workspace C:\path\to\controlled-workspace
 
 Without `--workspace`, Dure applies into `.dure/workspaces/<run-id>`. Apply requires an approved, verified patch proposal, writes only create/modify operations, blocks deletes and unsafe paths, records `apply.json` and `rollback.json`, and does not run verification or git commands.
 
+Verify an applied workspace:
+
+```bash
+corepack pnpm cli -- verify <run-id>
+corepack pnpm cli -- verify <run-id> --script test --timeout-ms 30000
+```
+
+Verification only runs allow-listed `package.json` scripts: `test`, `lint`, and `typecheck`. It must target the same workspace recorded in `apply.json`, blocks pre/post lifecycle hooks in v0.1, redacts secret-like output, records `workspace-verification.json` plus `verification-output/`, and updates the run to `verified` or `failed`.
+
 Record bug bounty scope intake:
 
 ```bash
@@ -190,6 +199,21 @@ Changes:
   - create: src/index.js
 ```
 
+Workspace verification example:
+
+```text
+Dure Verification
+
+Run:
+  - id: run-20260627-000003Z-abc123
+  - previous status: applied
+  - new status: verified
+
+Commands:
+  - test: passed (exit 0, 320ms)
+  - lint: not_configured (exit n/a, 0ms)
+```
+
 Bug bounty example:
 
 ```text
@@ -237,7 +261,9 @@ examples/                Future example projects
 - MoochackerAgent produces structured bug bounty safety guidance only; active testing, target access, and external requests are not executed.
 - Approval records are durable gates for later controlled apply; approval itself does not modify files.
 - Controlled apply writes only approved patch content into a controlled workspace and records rollback metadata, but rollback execution is not implemented yet.
-- Test, lint, typecheck, and dependency audit checks are placeholders.
+- Proposal-time test, lint, and typecheck checks are placeholders.
+- Applied workspace verification can run allow-listed `test`, `lint`, and `typecheck` package scripts only.
+- Dependency audit remains a placeholder and never contacts registries in v0.1.
 - Operations and productivity integrations are declarations only.
 - Patch proposals are structured data and are not automatically applied.
 - LLM providers are represented by an interface only.

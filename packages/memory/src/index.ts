@@ -23,8 +23,11 @@ import type {
   RollbackRecord,
   SafetyDecision,
   TaskModeProposal,
-  VerificationResult
+  VerificationResult,
+  WorkspaceVerificationRecord,
+  WorkspaceVerificationScriptName
 } from "@dure/core";
+import { WorkspaceVerifier } from "@dure/verifier";
 
 export class DecisionLogRecorder {
   private readonly entries: DecisionLogEntry[] = [];
@@ -70,6 +73,13 @@ export interface AttachBugBountyScopeInput {
 
 export interface ApplyRunInput {
   readonly workspaceRoot?: string;
+  readonly now?: Date;
+}
+
+export interface VerifyRunInput {
+  readonly workspaceRoot?: string;
+  readonly scripts?: readonly WorkspaceVerificationScriptName[];
+  readonly timeoutMs?: number;
   readonly now?: Date;
 }
 
@@ -245,7 +255,7 @@ export class RunStore {
       previousStatus: preview.metadata.status,
       nextStatus: "applied",
       files: appliedFiles,
-      nextRecommendedAction: "Run approved verification in a later stage before marking this run verified."
+      nextRecommendedAction: "Run `dure verify` to execute approved local checks before marking this run verified."
     };
     const rollbackRecord: RollbackRecord = {
       runId,
@@ -291,6 +301,77 @@ export class RunStore {
     return applyRecord;
   }
 
+  verifyRun(runId: string, input: VerifyRunInput = {}): WorkspaceVerificationRecord {
+    const now = input.now ?? new Date();
+    const preview = this.loadPreview(runId);
+    if (preview.metadata.status !== "applied") {
+      throw new Error(`Run ${runId} cannot be verified; current status is ${preview.metadata.status}.`);
+    }
+    if (preview.proposal.kind !== "patch") {
+      throw new Error(`Run ${runId} is not a patch proposal (${preview.proposal.kind}).`);
+    }
+    if (!preview.approvalRecord || preview.approvalRecord.decision !== "approved") {
+      throw new Error(`Run ${runId} cannot be verified without an approved approval record.`);
+    }
+    if (!preview.applyRecord) {
+      throw new Error(`Run ${runId} cannot be verified because apply.json is missing.`);
+    }
+    if (preview.artifactPaths.workspaceVerification && existsSync(preview.artifactPaths.workspaceVerification)) {
+      throw new Error(`Run ${runId} already has a workspace verification result.`);
+    }
+
+    const appliedWorkspaceRoot = path.resolve(preview.applyRecord.workspaceRoot);
+    const workspaceRoot = path.resolve(input.workspaceRoot ?? appliedWorkspaceRoot);
+    if (!isSamePath(workspaceRoot, appliedWorkspaceRoot)) {
+      throw new Error(`Verification workspace must match the applied workspace: ${appliedWorkspaceRoot}.`);
+    }
+
+    const verifier = new WorkspaceVerifier();
+    const record = verifier.verifyWorkspace({
+      runId,
+      proposalId: preview.metadata.proposalId,
+      workspaceRoot,
+      outputRoot: path.join(preview.artifactPaths.runDir, "verification-output"),
+      previousStatus: preview.metadata.status,
+      scripts: input.scripts,
+      timeoutMs: input.timeoutMs,
+      now
+    });
+
+    writeJson(path.join(preview.artifactPaths.runDir, "workspace-verification.json"), record);
+    appendJsonLine(preview.artifactPaths.decisionLog, {
+      type: "workspace_verification_result",
+      message: "Applied workspace verification completed with allow-listed package scripts.",
+      data: {
+        runId,
+        proposalId: record.proposalId,
+        workspaceRoot: record.workspaceRoot,
+        accepted: record.accepted,
+        previousStatus: record.previousStatus,
+        nextStatus: record.nextStatus,
+        commands: record.commands.map((command) => ({
+          name: command.name,
+          status: command.status,
+          configured: command.configured,
+          exitCode: command.exitCode,
+          durationMs: command.durationMs
+        })),
+        localChecks: record.localChecks.map((check) => ({
+          name: check.name,
+          passed: check.passed,
+          mocked: check.mocked,
+          summary: check.summary
+        }))
+      },
+      timestamp: record.completedAt
+    } satisfies DecisionLogEntry);
+    this.updateMetadata(preview, record.nextStatus, new Date(record.completedAt), {
+      hasWorkspaceVerification: true
+    });
+
+    return record;
+  }
+
   loadPreview(runId: string): RunPreview {
     if (!isSafeRunId(runId)) {
       throw new Error(`Invalid run id: ${runId}`);
@@ -299,6 +380,7 @@ export class RunStore {
     const runDir = path.join(this.root, runId);
     const artifactPaths = createArtifactPaths(runDir, {
       hasVerification: existsSync(path.join(runDir, "verification.json")),
+      hasWorkspaceVerification: existsSync(path.join(runDir, "workspace-verification.json")),
       hasApproval: existsSync(path.join(runDir, "approval.json")),
       hasScope: existsSync(path.join(runDir, "scope.json")),
       hasApply: existsSync(path.join(runDir, "apply.json")),
@@ -319,6 +401,9 @@ export class RunStore {
     const safetyDecision = readJson<SafetyDecision>(artifactPaths.safety);
     const verificationResult = artifactPaths.verification && existsSync(artifactPaths.verification)
       ? readJson<VerificationResult>(artifactPaths.verification)
+      : undefined;
+    const workspaceVerificationRecord = artifactPaths.workspaceVerification && existsSync(artifactPaths.workspaceVerification)
+      ? readJson<WorkspaceVerificationRecord>(artifactPaths.workspaceVerification)
       : undefined;
     const approvalRecord = artifactPaths.approval && existsSync(artifactPaths.approval)
       ? readJson<ApprovalRecord>(artifactPaths.approval)
@@ -355,6 +440,7 @@ export class RunStore {
       proposal,
       safetyDecision,
       verificationResult,
+      workspaceVerificationRecord,
       approvalRecord,
       bugBountyScope,
       applyRecord,
@@ -453,10 +539,13 @@ export class RunStore {
       readonly hasScope?: boolean;
       readonly hasApply?: boolean;
       readonly hasRollback?: boolean;
+      readonly hasWorkspaceVerification?: boolean;
     }
   ): void {
     const artifactPaths = createArtifactPaths(preview.artifactPaths.runDir, {
       hasVerification: preview.artifactPaths.verification !== undefined,
+      hasWorkspaceVerification:
+        options.hasWorkspaceVerification ?? preview.artifactPaths.workspaceVerification !== undefined,
       hasApproval: options.hasApproval ?? preview.artifactPaths.approval !== undefined,
       hasScope: options.hasScope ?? preview.artifactPaths.scope !== undefined,
       hasApply: "hasApply" in options ? options.hasApply : preview.artifactPaths.apply !== undefined,
@@ -490,6 +579,7 @@ function createArtifactPaths(
   runDir: string,
   options: boolean | {
     readonly hasVerification?: boolean;
+    readonly hasWorkspaceVerification?: boolean;
     readonly hasApproval?: boolean;
     readonly hasScope?: boolean;
     readonly hasApply?: boolean;
@@ -506,6 +596,9 @@ function createArtifactPaths(
     decisionLog: path.join(runDir, "decision-log.jsonl"),
     metadata: path.join(runDir, "metadata.json"),
     verification: normalized.hasVerification ? path.join(runDir, "verification.json") : undefined,
+    workspaceVerification: normalized.hasWorkspaceVerification
+      ? path.join(runDir, "workspace-verification.json")
+      : undefined,
     approval: normalized.hasApproval ? path.join(runDir, "approval.json") : undefined,
     scope: normalized.hasScope ? path.join(runDir, "scope.json") : undefined,
     apply: normalized.hasApply ? path.join(runDir, "apply.json") : undefined,
@@ -620,6 +713,14 @@ function isSafePatchPath(candidate: string): boolean {
 function isPathInside(root: string, candidate: string): boolean {
   const relative = path.relative(path.resolve(root), path.resolve(candidate));
   return relative.length === 0 || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function isSamePath(left: string, right: string): boolean {
+  const normalizedLeft = path.resolve(left);
+  const normalizedRight = path.resolve(right);
+  return process.platform === "win32"
+    ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
+    : normalizedLeft === normalizedRight;
 }
 
 function assertNoSymlinkAncestor(root: string, targetPath: string): void {

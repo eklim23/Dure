@@ -37,6 +37,7 @@ User Natural Language Input
    - `dure approve <run-id>`
    - `dure reject <run-id>`
    - `dure apply <run-id>`
+   - `dure verify <run-id>`
    - `dure scope <run-id>`
 
 2. Assistant Core
@@ -77,11 +78,11 @@ User Natural Language Input
 
 8. Controlled Execution
 
-   Development patches are proposals, not automatic edits. `approve` and `reject` create durable approval decisions under `.dure/runs/<run-id>/approval.json`; they do not apply files or execute commands. `apply` requires an approved patch run and writes create/modify operations only into a controlled workspace, recording `apply.json`, `rollback.json`, backups, and a decision-log event. Bug Bounty Mode produces scope and evidence plans only until explicit authorization and rules of engagement are known.
+   Development patches are proposals, not automatic edits. `approve` and `reject` create durable approval decisions under `.dure/runs/<run-id>/approval.json`; they do not apply files or execute commands. `apply` requires an approved patch run and writes create/modify operations only into a controlled workspace, recording `apply.json`, `rollback.json`, backups, and a decision-log event. `verify` then runs only allow-listed package scripts from the applied workspace and records `workspace-verification.json`. Bug Bounty Mode produces scope and evidence plans only until explicit authorization and rules of engagement are known.
 
 9. Verification / Safety Gate
 
-   `packages/verifier` handles patch verification. Non-development modes use `SafetyDecision` to record blocked placeholder integrations and approval needs.
+   `packages/verifier` handles proposal-time patch verification and applied-workspace verification. Proposal-time test, lint, typecheck, and dependency audit checks remain conservative placeholders. Applied-workspace verification may run only `test`, `lint`, and `typecheck` scripts from `package.json`, blocks pre/post lifecycle hooks in v0.1, captures redacted output, and updates the run to `verified` or `failed`.
 
 10. Skill Registry
 
@@ -89,7 +90,7 @@ User Natural Language Input
 
 11. Memory / Decision Log
 
-   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, approval decisions, controlled apply records, bug bounty scope intake, and next recommended step.
+   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, approval decisions, controlled apply records, workspace verification records, bug bounty scope intake, and next recommended step.
 
 ## MVP Ladder For Development Mode
 

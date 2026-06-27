@@ -106,6 +106,50 @@ test("apply command rejects duplicate apply", async () => {
   assert.match(duplicate.stderr, /current status is applied/);
 });
 
+test("verify command runs applied workspace scripts and updates preview status", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-verify-"));
+  const workspaceRoot = path.join(tempRoot, "workspace");
+  const record = persistRun(tempRoot, patchProposalFixture(), "development");
+
+  assert.equal(runCli(tempRoot, ["approve", record.id]).status, 0);
+  assert.equal(runCli(tempRoot, ["apply", record.id, "--workspace", workspaceRoot]).status, 0);
+  const verification = runCli(tempRoot, ["verify", record.id, "--workspace", workspaceRoot, "--script", "test"]);
+  const preview = runCli(tempRoot, ["preview", record.id]);
+
+  assert.equal(verification.status, 0, verification.stderr);
+  assert.match(verification.stdout, /Dure Verification/);
+  assert.match(verification.stdout, /new status: verified/);
+  assert.match(verification.stdout, /test: passed/);
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.match(preview.stdout, /run status: verified/);
+  assert.match(preview.stdout, /Workspace Verification/);
+});
+
+test("verify command returns non-zero when an applied script fails", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-verify-fail-"));
+  const workspaceRoot = path.join(tempRoot, "workspace");
+  const record = persistRun(tempRoot, failingPatchProposalFixture(), "development");
+
+  assert.equal(runCli(tempRoot, ["approve", record.id]).status, 0);
+  assert.equal(runCli(tempRoot, ["apply", record.id, "--workspace", workspaceRoot]).status, 0);
+  const verification = runCli(tempRoot, ["verify", record.id, "--workspace", workspaceRoot, "--script", "test"]);
+  const preview = runCli(tempRoot, ["preview", record.id]);
+
+  assert.notEqual(verification.status, 0);
+  assert.match(verification.stdout, /new status: failed/);
+  assert.match(verification.stdout, /test: failed/);
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.match(preview.stdout, /run status: failed/);
+});
+
+test("verify command rejects unsupported scripts", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-verify-unsupported-"));
+  const result = runCli(tempRoot, ["verify", "run-20260627-000000Z-ffffff", "--script", "build"]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Unsupported verification script/);
+});
+
 test("scope command records bug bounty scope intake", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-scope-"));
   const record = persistRun(tempRoot, bugBountyProposalFixture(), "bug_bounty");
@@ -236,7 +280,17 @@ function patchProposalFixture(): TaskModeProposal {
         path: "package.json",
         operation: "create",
         rationale: "Declare a minimal runnable package.",
-        content: JSON.stringify({ name: "generated-cli-mvp" }, null, 2)
+        content: JSON.stringify(
+          {
+            name: "generated-cli-mvp",
+            private: true,
+            scripts: {
+              test: "node -e \"console.log('test ok')\""
+            }
+          },
+          null,
+          2
+        )
       }
     ],
     policy: {
@@ -246,6 +300,33 @@ function patchProposalFixture(): TaskModeProposal {
     },
     createdAt: "2026-06-27T00:00:00.000Z",
     status: "accepted"
+  };
+}
+
+function failingPatchProposalFixture(): TaskModeProposal {
+  const base = patchProposalFixture();
+  assert.equal(base.kind, "patch");
+  return {
+    ...base,
+    id: "patch-cli-failing-test",
+    changes: [
+      {
+        path: "package.json",
+        operation: "create",
+        rationale: "Declare a package with a failing test script.",
+        content: JSON.stringify(
+          {
+            name: "generated-cli-mvp",
+            private: true,
+            scripts: {
+              test: "node -e \"process.exit(1)\""
+            }
+          },
+          null,
+          2
+        )
+      }
+    ]
   };
 }
 

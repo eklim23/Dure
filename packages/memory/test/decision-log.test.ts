@@ -221,6 +221,119 @@ test("run store applies an approved patch to a controlled workspace", async () =
   assert.throws(() => store.applyRun(record.id), /current status is applied/);
 });
 
+test("run store verifies an applied workspace with allow-listed scripts", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-verify-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: verifiablePatchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:23.000Z")
+  });
+
+  store.approveRun(record.id, { now: new Date("2026-06-27T00:00:24.000Z") });
+  store.applyRun(record.id, { now: new Date("2026-06-27T00:00:25.000Z") });
+  const verification = store.verifyRun(record.id, {
+    scripts: ["test"],
+    now: new Date("2026-06-27T00:00:26.000Z")
+  });
+  const preview = store.loadPreview(record.id);
+
+  assert.equal(verification.accepted, true);
+  assert.equal(verification.nextStatus, "verified");
+  assert.equal(preview.metadata.status, "verified");
+  assert.equal(preview.workspaceVerificationRecord?.accepted, true);
+  assert.ok(preview.artifactPaths.workspaceVerification);
+  assert.ok(existsSync(preview.artifactPaths.workspaceVerification));
+  assert.equal(preview.decisionLog.entries.at(-1)?.type, "workspace_verification_result");
+});
+
+test("run store marks failed workspace verification as failed", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-verify-failed-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: failingVerificationPatchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:27.000Z")
+  });
+
+  store.approveRun(record.id, { now: new Date("2026-06-27T00:00:28.000Z") });
+  store.applyRun(record.id, { now: new Date("2026-06-27T00:00:29.000Z") });
+  const verification = store.verifyRun(record.id, {
+    scripts: ["test"],
+    now: new Date("2026-06-27T00:00:30.000Z")
+  });
+  const preview = store.loadPreview(record.id);
+
+  assert.equal(verification.accepted, false);
+  assert.equal(verification.commands[0].status, "failed");
+  assert.equal(preview.metadata.status, "failed");
+  assert.throws(() => store.verifyRun(record.id), /current status is failed/);
+});
+
+test("run store rejects unsafe workspace verification states", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-verify-reject-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: verifiablePatchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:31.000Z")
+  });
+
+  assert.throws(() => store.verifyRun(record.id), /current status is proposed/);
+  store.approveRun(record.id, { now: new Date("2026-06-27T00:00:32.000Z") });
+  assert.throws(() => store.verifyRun(record.id), /current status is approved/);
+  store.applyRun(record.id, {
+    workspaceRoot: path.join(tempRoot, "workspace"),
+    now: new Date("2026-06-27T00:00:33.000Z")
+  });
+  assert.throws(
+    () => store.verifyRun(record.id, { workspaceRoot: path.join(tempRoot, "other-workspace") }),
+    /must match the applied workspace/
+  );
+});
+
+test("run store records missing package.json verification as failed", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-verify-no-package-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: readmeOnlyPatchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:34.000Z")
+  });
+
+  store.approveRun(record.id, { now: new Date("2026-06-27T00:00:35.000Z") });
+  store.applyRun(record.id, { now: new Date("2026-06-27T00:00:36.000Z") });
+  const verification = store.verifyRun(record.id, {
+    scripts: ["test"],
+    now: new Date("2026-06-27T00:00:37.000Z")
+  });
+
+  assert.equal(verification.accepted, false);
+  assert.equal(verification.commands[0].status, "blocked");
+  assert.match(verification.commands[0].notes.join("\n"), /Missing package\.json/);
+  assert.equal(store.loadPreview(record.id).metadata.status, "failed");
+});
+
 test("run store backs up modified files during apply", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-apply-modify-"));
   const workspaceRoot = path.join(tempRoot, "workspace");
@@ -441,6 +554,77 @@ function patchProposalFixture(): TaskModeProposal {
     },
     createdAt: "2026-06-27T00:00:00.000Z",
     status: "accepted"
+  };
+}
+
+function verifiablePatchProposalFixture(): TaskModeProposal {
+  const base = patchProposalFixture();
+  assert.equal(base.kind, "patch");
+  return {
+    ...base,
+    id: "patch-verifiable-test",
+    changes: [
+      {
+        path: "package.json",
+        operation: "create",
+        rationale: "Declare a minimal package with an executable test script.",
+        content: JSON.stringify(
+          {
+            name: "generated-memory-mvp",
+            private: true,
+            scripts: {
+              test: "node -e \"console.log('test ok')\""
+            }
+          },
+          null,
+          2
+        )
+      }
+    ]
+  };
+}
+
+function failingVerificationPatchProposalFixture(): TaskModeProposal {
+  const base = verifiablePatchProposalFixture();
+  assert.equal(base.kind, "patch");
+  return {
+    ...base,
+    id: "patch-failing-verification-test",
+    changes: [
+      {
+        path: "package.json",
+        operation: "create",
+        rationale: "Declare a package with a failing test script.",
+        content: JSON.stringify(
+          {
+            name: "generated-memory-mvp",
+            private: true,
+            scripts: {
+              test: "node -e \"process.exit(1)\""
+            }
+          },
+          null,
+          2
+        )
+      }
+    ]
+  };
+}
+
+function readmeOnlyPatchProposalFixture(): TaskModeProposal {
+  const base = patchProposalFixture();
+  assert.equal(base.kind, "patch");
+  return {
+    ...base,
+    id: "patch-readme-only-test",
+    changes: [
+      {
+        path: "README.md",
+        operation: "create",
+        rationale: "Create a file without a package manifest.",
+        content: "hello\n"
+      }
+    ]
   };
 }
 

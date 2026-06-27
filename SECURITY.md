@@ -9,7 +9,10 @@ Dure is built around conservative agent control.
 - Only the builder path can create patch proposals.
 - Review agents cannot write patches.
 - Verification must pass before a proposal is accepted.
-- v0.1 does not run generated project shell commands.
+- v0.1 runs generated project commands only after approval and controlled apply.
+- Applied workspace verification is limited to allow-listed `package.json` scripts: `test`, `lint`, and `typecheck`.
+- Arbitrary shell commands, package installs, network audits, git commands, and pre/post lifecycle hooks are not allowed in the v0.1 verification path.
+- Verification output is length-limited and redacts secret-like values before persistence.
 - v0.1 does not execute untrusted skills.
 
 ## Responsible Disclosure

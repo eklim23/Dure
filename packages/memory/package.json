@@ -11,6 +11,7 @@
     "test:run": "node --test dist/test/*.test.js"
   },
   "dependencies": {
-    "@dure/core": "workspace:*"
+    "@dure/core": "workspace:*",
+    "@dure/verifier": "workspace:*"
   }
 }

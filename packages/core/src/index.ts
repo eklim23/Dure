@@ -247,6 +247,46 @@ export interface VerificationResult {
   readonly completedAt: string;
 }
 
+export type WorkspaceVerificationScriptName = "test" | "lint" | "typecheck";
+
+export type WorkspaceVerificationCommandStatus =
+  | "passed"
+  | "failed"
+  | "not_configured"
+  | "timed_out"
+  | "blocked";
+
+export interface WorkspaceVerificationCommandResult {
+  readonly name: WorkspaceVerificationScriptName;
+  readonly status: WorkspaceVerificationCommandStatus;
+  readonly configured: boolean;
+  readonly command: readonly string[];
+  readonly script?: string;
+  readonly exitCode?: number;
+  readonly signal?: string;
+  readonly durationMs: number;
+  readonly stdoutPath?: string;
+  readonly stderrPath?: string;
+  readonly stdoutPreview: string;
+  readonly stderrPreview: string;
+  readonly notes: readonly string[];
+}
+
+export interface WorkspaceVerificationRecord {
+  readonly runId: string;
+  readonly proposalId: string;
+  readonly workspaceRoot: string;
+  readonly packageManager: "pnpm";
+  readonly startedAt: string;
+  readonly completedAt: string;
+  readonly accepted: boolean;
+  readonly previousStatus: RunStatus;
+  readonly nextStatus: "verified" | "failed";
+  readonly commands: readonly WorkspaceVerificationCommandResult[];
+  readonly localChecks: readonly VerificationCheck[];
+  readonly nextRecommendedAction: string;
+}
+
 export type DecisionLogEntryType =
   | "original_user_input"
   | "task_mode_selected"
@@ -257,6 +297,7 @@ export type DecisionLogEntryType =
   | "approval_decision"
   | "bug_bounty_scope_intake"
   | "patch_applied"
+  | "workspace_verification_result"
   | "inferred_goal"
   | "mvp_scope_decision"
   | "agent_comments"
@@ -288,6 +329,7 @@ export interface RunArtifactPaths {
   readonly decisionLog: string;
   readonly metadata: string;
   readonly verification?: string;
+  readonly workspaceVerification?: string;
   readonly approval?: string;
   readonly scope?: string;
   readonly apply?: string;
@@ -394,6 +436,7 @@ export interface RunPreview {
   readonly proposal: TaskModeProposal;
   readonly safetyDecision: SafetyDecision;
   readonly verificationResult?: VerificationResult;
+  readonly workspaceVerificationRecord?: WorkspaceVerificationRecord;
   readonly approvalRecord?: ApprovalRecord;
   readonly bugBountyScope?: BugBountyScopeRecord;
   readonly applyRecord?: ApplyRecord;
