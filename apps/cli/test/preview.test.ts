@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -254,6 +254,97 @@ test("evidence command records and lists bug bounty evidence leads", async () =>
   assert.doesNotMatch(await readFile(ledgerPath, "utf8"), /supersecrettoken123/);
 });
 
+test("report command drafts and lists bug bounty report markdown", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-report-"));
+  const record = persistRun(tempRoot, bugBountyProposalFixture(), "bug_bounty");
+
+  assert.equal(runCli(tempRoot, [
+    "scope",
+    record.id,
+    "--target",
+    "api.example.com",
+    "--in-scope",
+    "api.example.com,/v1/*",
+    "--out-of-scope",
+    "admin.example.com",
+    "--allowed",
+    "read-only authorization checks",
+    "--forbidden",
+    "DoS,brute force",
+    "--rate-limit",
+    "10 requests per minute",
+    "--roles",
+    "user,admin-test",
+    "--data",
+    "redact tokens and personal data",
+    "--authorization-note",
+    "Program scope supplied by user"
+  ]).status, 0);
+  assert.equal(runCli(tempRoot, [
+    "evidence",
+    record.id,
+    "--status",
+    "confirmed",
+    "--asset",
+    "api.example.com",
+    "--endpoint",
+    "/v1/orders/123",
+    "--method",
+    "GET",
+    "--role",
+    "user",
+    "--hypothesis",
+    "A user may be able to read another user's order detail.",
+    "--request",
+    "GET /v1/orders/123 Authorization: Bearer supersecrettoken123",
+    "--response",
+    "200 OK for [test-user-b]",
+    "--impact",
+    "Confirmed cross-account order detail exposure.",
+    "--confidence",
+    "high",
+    "--scope-note",
+    "api.example.com and /v1/* are in scope.",
+    "--next-action",
+    "Draft a report."
+  ]).status, 0);
+
+  const ledgerPath = path.join(tempRoot, ".dure", "runs", record.id, "evidence-ledger.jsonl");
+  const lead = JSON.parse((await readFile(ledgerPath, "utf8")).trim()) as { id: string };
+  const drafted = runCli(tempRoot, [
+    "report",
+    record.id,
+    "--lead",
+    lead.id,
+    "--title",
+    "Confirmed cross-account order detail exposure",
+    "--severity",
+    "medium",
+    "--roles",
+    "user",
+    "--step",
+    "Use two authorized test accounts.",
+    "--step",
+    "Request the order detail endpoint with the second account's object id.",
+    "--remediation",
+    "Enforce object ownership checks.",
+    "--duplicate-risk",
+    "false"
+  ]);
+  const listed = runCli(tempRoot, ["report", record.id]);
+  const reportsDir = path.join(tempRoot, ".dure", "runs", record.id, "reports");
+
+  assert.equal(drafted.status, 0, drafted.stderr);
+  assert.match(drafted.stdout, /Dure Report Draft/);
+  assert.match(drafted.stdout, /severity: medium/);
+  assert.match(drafted.stdout, /Confirmed cross-account order detail exposure/);
+  assert.equal(listed.status, 0, listed.stderr);
+  assert.match(listed.stdout, /Dure Report Drafts/);
+  assert.match(listed.stdout, /reports: 1/);
+  assert.ok(existsSync(reportsDir));
+  assert.match(await readFile(path.join(reportsDir, (await fileNameEndingWith(reportsDir, ".md"))), "utf8"), /## Recommended Remediation/);
+});
+
 test("evidence command rejects development runs", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-evidence-dev-"));
   const record = persistRun(tempRoot, patchProposalFixture(), "development");
@@ -292,6 +383,12 @@ function runCli(cwd: string, args: readonly string[]) {
     cwd,
     encoding: "utf8"
   });
+}
+
+async function fileNameEndingWith(directory: string, suffix: string): Promise<string> {
+  const match = readdirSync(directory).find((fileName) => fileName.endsWith(suffix));
+  assert.ok(match);
+  return match;
 }
 
 function persistRun(tempRoot: string, proposal: TaskModeProposal, selectedMode: AssistantRequestContext["selectedMode"]) {

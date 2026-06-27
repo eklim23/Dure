@@ -11,6 +11,9 @@ import type {
   BugBountyEvidenceRecord,
   BugBountyEvidenceStatus,
   BugBountyHttpMethod,
+  BugBountyReportDraftInput,
+  BugBountyReportDraftRecord,
+  BugBountySeverity,
   BugBountyScopeIntake,
   BugBountyScopeRecord,
   PatchProposal,
@@ -104,6 +107,22 @@ try {
     process.exit(0);
   }
 
+  if (parsed.command === "report") {
+    if (!parsed.runId) {
+      throw new Error("report requires a run id.");
+    }
+    const store = new RunStore();
+    if (parsed.listReports) {
+      printReportDrafts(store.loadPreview(parsed.runId));
+    } else if (parsed.bugBountyReportDraftInput) {
+      const record = store.draftBugBountyReport(parsed.runId, { draft: parsed.bugBountyReportDraftInput });
+      printReportDraft(record);
+    } else {
+      throw new Error("report requires --lead to draft a report, or no options to list report drafts.");
+    }
+    process.exit(0);
+  }
+
   if (!parsed.request) {
     printUsage();
     process.exit(args.length === 0 ? 0 : 1);
@@ -121,7 +140,7 @@ try {
 }
 
 interface ParsedArgs {
-  readonly command?: "run" | "ask" | "preview" | "approve" | "reject" | "scope" | "apply" | "verify" | "evidence";
+  readonly command?: "run" | "ask" | "preview" | "approve" | "reject" | "scope" | "apply" | "verify" | "evidence" | "report";
   readonly request?: string;
   readonly previewRunId?: string;
   readonly runId?: string;
@@ -132,6 +151,8 @@ interface ParsedArgs {
   readonly scopeIntake?: BugBountyScopeIntake;
   readonly bugBountyEvidenceInput?: BugBountyEvidenceInput;
   readonly listEvidence?: boolean;
+  readonly bugBountyReportDraftInput?: BugBountyReportDraftInput;
+  readonly listReports?: boolean;
   readonly modeOverride?: TaskMode;
   readonly persist: boolean;
 }
@@ -195,6 +216,11 @@ function parseArgs(tokens: readonly string[]): ParsedArgs {
   if (commandOrRequest === "evidence") {
     rejectRunCommandGlobalOptions("evidence", modeOverride, persist);
     return parseEvidenceCommand(rest, persist);
+  }
+
+  if (commandOrRequest === "report") {
+    rejectRunCommandGlobalOptions("report", modeOverride, persist);
+    return parseReportCommand(rest, persist);
   }
 
   if (commandOrRequest === "run" || commandOrRequest === "ask") {
@@ -370,6 +396,50 @@ function parseEvidenceCommand(tokens: readonly string[], persist: boolean): Pars
   };
 }
 
+function parseReportCommand(tokens: readonly string[], persist: boolean): ParsedArgs {
+  const [runId, ...rest] = tokens;
+  if (!runId || runId.trim().length === 0) {
+    throw new Error("report requires exactly one run id.");
+  }
+  if (rest.length === 0) {
+    return { command: "report", runId, listReports: true, persist };
+  }
+
+  const options = parseCommandOptions(rest, [
+    "lead",
+    "title",
+    "severity",
+    "roles",
+    "step",
+    "remediation",
+    "limitations",
+    "duplicate-risk"
+  ]);
+  const leadId = firstOption(options, "lead");
+  if (!leadId) {
+    throw new Error("report requires --lead when drafting a report.");
+  }
+  const severity = firstOption(options, "severity");
+  const duplicateRisk = firstOption(options, "duplicate-risk");
+  const draft: BugBountyReportDraftInput = {
+    leadId,
+    title: firstOption(options, "title"),
+    severity: severity ? parseSeverity(severity) : undefined,
+    affectedUsersOrRoles: listOptions(options, "roles"),
+    reproductionSteps: listOptions(options, "step"),
+    remediation: firstOption(options, "remediation"),
+    limitations: firstOption(options, "limitations"),
+    duplicateRisk: duplicateRisk === undefined ? undefined : parseBoolean(duplicateRisk, "--duplicate-risk")
+  };
+
+  return {
+    command: "report",
+    runId,
+    bugBountyReportDraftInput: draft,
+    persist
+  };
+}
+
 function parseCommandOptions(tokens: readonly string[], allowed: readonly string[]): Map<string, string[]> {
   const options = new Map<string, string[]>();
   for (let index = 0; index < tokens.length; index += 1) {
@@ -454,6 +524,26 @@ function parseHttpMethod(value: string): BugBountyHttpMethod {
     return normalized as BugBountyHttpMethod;
   }
   throw new Error(`Unsupported HTTP method: ${value}.`);
+}
+
+function parseSeverity(value: string): BugBountySeverity {
+  const normalized = value.trim().toLowerCase();
+  const allowed: readonly BugBountySeverity[] = ["informational", "low", "medium", "high", "critical"];
+  if (allowed.includes(normalized as BugBountySeverity)) {
+    return normalized as BugBountySeverity;
+  }
+  throw new Error(`Unsupported severity: ${value}.`);
+}
+
+function parseBoolean(value: string, optionName: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true" || normalized === "yes" || normalized === "1") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "no" || normalized === "0") {
+    return false;
+  }
+  throw new Error(`${optionName} requires true or false.`);
 }
 
 function readScopeFile(filePath: string): BugBountyScopeIntake {
@@ -557,6 +647,7 @@ function printUsage(): void {
   console.log("  dure verify <run-id> --script test --timeout-ms 30000");
   console.log('  dure scope <run-id> --target "api.example.com" --in-scope "api.example.com" --forbidden "DoS,brute force"');
   console.log('  dure evidence <run-id> --asset "api.example.com" --hypothesis "IDOR on order detail" --impact "Potential cross-account read" --scope-note "In scope" --next-action "Confirm with test accounts"');
+  console.log("  dure report <run-id> --lead <lead-id> --severity medium");
 }
 
 function printResult(result: AssistantRunResult): void {
@@ -722,6 +813,49 @@ function printEvidenceLedger(preview: RunPreview): void {
     entries.length > 0
       ? "Use evidence status and confidence to decide whether to draft a report or mark the lead as blocked/non-issue."
       : "Record a scoped hypothesis before drafting a finding."
+  ]);
+}
+
+function printReportDraft(record: BugBountyReportDraftRecord): void {
+  console.log("Dure Report Draft");
+  console.log("");
+  section("Run", [`id: ${record.runId}`, `report: ${record.id}`, `lead: ${record.leadId}`]);
+  section("Finding", [
+    `title: ${record.title}`,
+    `severity: ${record.severity}`,
+    `confidence: ${record.confidence}`,
+    `duplicate risk: ${record.duplicateRisk ? "yes" : "no"}`,
+    `asset: ${record.affectedAsset}`,
+    `endpoint: ${record.affectedEndpoint ?? "not recorded"}`
+  ]);
+  section("Severity", [record.severityRationale]);
+  section("Export", [`markdown: ${record.markdownPath}`]);
+  section("Next", [record.nextRecommendedAction]);
+}
+
+function printReportDrafts(preview: RunPreview): void {
+  if (preview.proposal.kind !== "bug_bounty_review") {
+    throw new Error(`Run ${preview.metadata.id} is not a bug bounty proposal (${preview.proposal.kind}).`);
+  }
+
+  const reports = preview.bugBountyReportDrafts ?? [];
+  console.log("Dure Report Drafts");
+  console.log("");
+  section("Run", [
+    `id: ${preview.metadata.id}`,
+    `target: ${preview.bugBountyScope?.target ?? "scope not recorded"}`,
+    `reports: ${reports.length}`
+  ]);
+  section(
+    "Drafts",
+    reports.length > 0
+      ? reports.map((report) => `${report.id}: ${report.severity}, ${report.confidence}, ${report.title}`)
+      : ["not recorded"]
+  );
+  section("Next", [
+    reports.length > 0
+      ? "Review markdown drafts before submission and confirm severity against the program policy."
+      : "Draft a report from a scoped evidence lead."
   ]);
 }
 

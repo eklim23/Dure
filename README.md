@@ -126,6 +126,15 @@ corepack pnpm cli -- evidence <run-id> --status testing --asset "api.example.com
 
 Evidence entries are append-only records in `.dure/runs/<run-id>/evidence-ledger.jsonl`. Dure records lead id, hypothesis, status, request/response placeholders, impact, confidence, scope notes, and next action. It applies redaction before persistence and does not send HTTP requests, run scanners, access targets, or validate findings in v0.1.
 
+Draft or list bug bounty reports:
+
+```bash
+corepack pnpm cli -- report <run-id>
+corepack pnpm cli -- report <run-id> --lead <lead-id> --severity medium --title "Confirmed cross-account order detail exposure"
+```
+
+Report drafts are generated from existing evidence ledger entries only. Dure writes `.dure/runs/<run-id>/reports/<report-id>.json` and `.md`, calibrates severity conservatively, blocks high or critical severity for unconfirmed leads, and does not validate, reproduce, submit, or disclose findings in v0.1.
+
 ## Example Output Shape
 
 ```text
@@ -211,6 +220,26 @@ Redaction:
   - applied: yes
 ```
 
+Bug bounty report draft example:
+
+```text
+Dure Report Draft
+
+Run:
+  - id: run-20260627-000003Z-abc123
+  - report: report-20260627-000005Z-ghi789
+  - lead: lead-20260627-000004Z-def456
+
+Finding:
+  - title: Confirmed cross-account order detail exposure
+  - severity: medium
+  - confidence: high
+  - asset: api.example.com
+
+Artifacts:
+  - markdown: .dure/runs/run-20260627-000003Z-abc123/reports/report-20260627-000005Z-ghi789.md
+```
+
 Controlled apply example:
 
 ```text
@@ -287,6 +316,7 @@ examples/                Future example projects
 - Task mode routing is keyword/signal based.
 - MoochackerAgent produces structured bug bounty safety guidance only; active testing, target access, and external requests are not executed.
 - Bug bounty evidence records are user-supplied ledger entries; Dure does not prove, reproduce, or actively test findings in v0.1.
+- Bug bounty report drafts are generated from stored evidence only; Dure does not validate findings, submit reports, or contact targets.
 - Approval records are durable gates for later controlled apply; approval itself does not modify files.
 - Controlled apply writes only approved patch content into a controlled workspace and records rollback metadata, but rollback execution is not implemented yet.
 - Proposal-time test, lint, and typecheck checks are placeholders.

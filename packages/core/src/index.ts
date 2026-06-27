@@ -297,6 +297,7 @@ export type DecisionLogEntryType =
   | "approval_decision"
   | "bug_bounty_scope_intake"
   | "bug_bounty_evidence_recorded"
+  | "bug_bounty_report_drafted"
   | "patch_applied"
   | "workspace_verification_result"
   | "inferred_goal"
@@ -334,6 +335,7 @@ export interface RunArtifactPaths {
   readonly approval?: string;
   readonly scope?: string;
   readonly evidenceLedger?: string;
+  readonly reports?: string;
   readonly apply?: string;
   readonly rollback?: string;
 }
@@ -433,6 +435,47 @@ export interface BugBountyEvidenceLedger {
   readonly entries: readonly BugBountyEvidenceRecord[];
 }
 
+export type BugBountySeverity = "informational" | "low" | "medium" | "high" | "critical";
+
+export interface BugBountyReportDraftInput {
+  readonly leadId: string;
+  readonly title?: string;
+  readonly severity?: BugBountySeverity;
+  readonly affectedUsersOrRoles?: readonly string[];
+  readonly reproductionSteps?: readonly string[];
+  readonly remediation?: string;
+  readonly limitations?: string;
+  readonly duplicateRisk?: boolean;
+}
+
+export interface BugBountyReportDraftRecord {
+  readonly id: string;
+  readonly runId: string;
+  readonly leadId: string;
+  readonly createdAt: string;
+  readonly title: string;
+  readonly severity: BugBountySeverity;
+  readonly severityRationale: string;
+  readonly confidence: BugBountyEvidenceConfidence;
+  readonly affectedAsset: string;
+  readonly affectedEndpoint?: string;
+  readonly affectedUsersOrRoles: readonly string[];
+  readonly summary: string;
+  readonly impact: string;
+  readonly reproductionSteps: readonly string[];
+  readonly evidence: readonly string[];
+  readonly whyThisMatters: string;
+  readonly remediation: string;
+  readonly limitations: string;
+  readonly scopeNotes: readonly string[];
+  readonly suggestedRetest: string;
+  readonly duplicateRisk: boolean;
+  readonly markdownPath: string;
+  readonly redactionApplied: true;
+  readonly safetyNotes: readonly string[];
+  readonly nextRecommendedAction: string;
+}
+
 export interface AppliedPatchFile {
   readonly path: string;
   readonly operation: "create" | "modify";
@@ -503,6 +546,7 @@ export interface RunPreview {
   readonly approvalRecord?: ApprovalRecord;
   readonly bugBountyScope?: BugBountyScopeRecord;
   readonly bugBountyEvidenceLedger?: BugBountyEvidenceLedger;
+  readonly bugBountyReportDrafts?: readonly BugBountyReportDraftRecord[];
   readonly applyRecord?: ApplyRecord;
   readonly rollbackRecord?: RollbackRecord;
   readonly decisionLog: DecisionLog;

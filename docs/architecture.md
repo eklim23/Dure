@@ -40,6 +40,7 @@ User Natural Language Input
    - `dure verify <run-id>`
    - `dure scope <run-id>`
    - `dure evidence <run-id>`
+   - `dure report <run-id>`
 
 2. Assistant Core
 
@@ -79,7 +80,7 @@ User Natural Language Input
 
 8. Controlled Execution
 
-   Development patches are proposals, not automatic edits. `approve` and `reject` create durable approval decisions under `.dure/runs/<run-id>/approval.json`; they do not apply files or execute commands. `apply` requires an approved patch run and writes create/modify operations only into a controlled workspace, recording `apply.json`, `rollback.json`, backups, and a decision-log event. `verify` then runs only allow-listed package scripts from the applied workspace and records `workspace-verification.json`. Bug Bounty Mode produces scope records and evidence ledger entries only until explicit authorization and rules of engagement are known.
+   Development patches are proposals, not automatic edits. `approve` and `reject` create durable approval decisions under `.dure/runs/<run-id>/approval.json`; they do not apply files or execute commands. `apply` requires an approved patch run and writes create/modify operations only into a controlled workspace, recording `apply.json`, `rollback.json`, backups, and a decision-log event. `verify` then runs only allow-listed package scripts from the applied workspace and records `workspace-verification.json`. Bug Bounty Mode produces scope records, evidence ledger entries, and report drafts only from user-supplied data until explicit authorization and rules of engagement are known.
 
 9. Verification / Safety Gate
 
@@ -91,7 +92,7 @@ User Natural Language Input
 
 11. Memory / Decision Log
 
-   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, approval decisions, controlled apply records, workspace verification records, bug bounty scope intake, bug bounty evidence ledger entries, and next recommended step.
+   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, approval decisions, controlled apply records, workspace verification records, bug bounty scope intake, bug bounty evidence ledger entries, bug bounty report drafts, and next recommended step.
 
 ## MVP Ladder For Development Mode
 
@@ -124,6 +125,8 @@ Before scope is known, Dure should continue with passive planning only.
 Scope intake is persisted as `.dure/runs/<run-id>/scope.json`. It stores only user-provided assets, rules, roles, and data handling expectations. It does not discover endpoints, infer related targets, contact hosts, run scanners, or store credentials.
 
 Evidence ledger entries are persisted as `.dure/runs/<run-id>/evidence-ledger.jsonl`. Each entry stores a lead id, status, asset, endpoint, method, role, hypothesis, request/response placeholders, impact, confidence, scope note, program rule notes, and next action. Dure applies local redaction before writing the ledger and does not validate or reproduce the lead in v0.1.
+
+Report drafts are persisted as `.dure/runs/<run-id>/reports/<report-id>.md` and `.json`. They are generated only from stored evidence ledger entries, include explicit limitations and scope notes, and use conservative severity calibration when the evidence is not confirmed.
 
 ## Naming
 

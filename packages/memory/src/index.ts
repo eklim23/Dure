@@ -1,5 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
-import { appendFileSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync
+} from "node:fs";
 import path from "node:path";
 import type {
   AppliedPatchFile,
@@ -11,6 +20,9 @@ import type {
   BugBountyEvidenceInput,
   BugBountyEvidenceLedger,
   BugBountyEvidenceRecord,
+  BugBountyReportDraftInput,
+  BugBountyReportDraftRecord,
+  BugBountySeverity,
   BugBountyScopeIntake,
   BugBountyScopeRecord,
   DecisionLog,
@@ -76,6 +88,11 @@ export interface AttachBugBountyScopeInput {
 
 export interface RecordBugBountyEvidenceInput {
   readonly evidence: BugBountyEvidenceInput;
+  readonly now?: Date;
+}
+
+export interface DraftBugBountyReportInput {
+  readonly draft: BugBountyReportDraftInput;
   readonly now?: Date;
 }
 
@@ -254,6 +271,100 @@ export class RunStore {
       timestamp: now.toISOString()
     } satisfies DecisionLogEntry);
     this.updateMetadata(preview, preview.metadata.status, now, { hasEvidenceLedger: true });
+
+    return record;
+  }
+
+  draftBugBountyReport(runId: string, input: DraftBugBountyReportInput): BugBountyReportDraftRecord {
+    const now = input.now ?? new Date();
+    const preview = this.loadPreview(runId);
+    if (preview.proposal.kind !== "bug_bounty_review") {
+      throw new Error(`Run ${runId} is not a bug bounty proposal (${preview.proposal.kind}).`);
+    }
+    if (!preview.bugBountyScope) {
+      throw new Error(`Run ${runId} cannot draft a report before bug bounty scope intake is recorded.`);
+    }
+    const lead = preview.bugBountyEvidenceLedger?.entries.find((entry) => entry.id === input.draft.leadId);
+    if (!lead) {
+      throw new Error(`Evidence lead not found: ${input.draft.leadId}`);
+    }
+    if (lead.status === "blocked" || lead.status === "non-issue") {
+      throw new Error(`Run ${runId} cannot draft a finding report from a ${lead.status} lead.`);
+    }
+
+    const severity = input.draft.severity ?? calibrateSeverity(lead);
+    if (lead.status !== "confirmed" && (severity === "high" || severity === "critical")) {
+      throw new Error("High or critical severity requires a confirmed evidence lead.");
+    }
+
+    const reportId = createReportDraftId(now);
+    const reportsDir = path.join(preview.artifactPaths.runDir, "reports");
+    const markdownPath = path.join(reportsDir, `${reportId}.md`);
+    const recordPath = path.join(reportsDir, `${reportId}.json`);
+    mkdirSync(reportsDir, { recursive: true });
+
+    const affectedUsersOrRoles = normalizeReportList(input.draft.affectedUsersOrRoles, [
+      lead.userRole,
+      ...preview.bugBountyScope.testAccountRoles
+    ]);
+    const title = cleanOptionalString(input.draft.title)
+      ?? defaultReportTitle(lead, severity);
+    const record: BugBountyReportDraftRecord = {
+      id: reportId,
+      runId,
+      leadId: lead.id,
+      createdAt: now.toISOString(),
+      title,
+      severity,
+      severityRationale: severityRationale(lead, severity),
+      confidence: lead.confidence,
+      affectedAsset: lead.asset,
+      affectedEndpoint: lead.endpoint,
+      affectedUsersOrRoles,
+      summary: buildReportSummary(lead),
+      impact: lead.impact,
+      reproductionSteps: normalizeReportList(input.draft.reproductionSteps, defaultReproductionSteps(lead)),
+      evidence: defaultEvidenceLines(lead),
+      whyThisMatters: buildWhyThisMatters(lead),
+      remediation: cleanOptionalString(input.draft.remediation) ?? defaultRemediation(lead),
+      limitations: cleanOptionalString(input.draft.limitations) ?? defaultLimitations(lead),
+      scopeNotes: cleanList([
+        lead.scopeNote,
+        lead.programRuleNotes,
+        `In scope assets: ${preview.bugBountyScope.inScopeAssets.join(", ") || "not recorded"}.`,
+        `Out of scope assets: ${preview.bugBountyScope.outOfScopeAssets.join(", ") || "not recorded"}.`,
+        `Forbidden techniques: ${preview.bugBountyScope.forbiddenTechniques.join(", ") || "not recorded"}.`
+      ]),
+      suggestedRetest: "Retest with authorized accounts after remediation by repeating the minimal-impact steps and confirming the expected authorization or validation control is enforced.",
+      duplicateRisk: input.draft.duplicateRisk ?? lead.status === "duplicate-risk",
+      markdownPath,
+      redactionApplied: true,
+      safetyNotes: [
+        "Report draft is generated from existing ledger evidence only.",
+        "Dure did not send requests, scan targets, exploit issues, or validate the finding.",
+        "Review program rules and remove sensitive data before submission."
+      ],
+      nextRecommendedAction: "Review the draft, confirm evidence and severity, then export or revise before submission."
+    };
+
+    writeJson(recordPath, record);
+    writeFileSync(markdownPath, renderReportMarkdown(record), "utf8");
+    appendJsonLine(preview.artifactPaths.decisionLog, {
+      type: "bug_bounty_report_drafted",
+      message: "Bug bounty report draft was generated from an evidence ledger entry.",
+      data: {
+        runId,
+        reportId: record.id,
+        leadId: record.leadId,
+        title: record.title,
+        severity: record.severity,
+        confidence: record.confidence,
+        duplicateRisk: record.duplicateRisk,
+        markdownPath: record.markdownPath
+      },
+      timestamp: now.toISOString()
+    } satisfies DecisionLogEntry);
+    this.updateMetadata(preview, preview.metadata.status, now, { hasEvidenceLedger: true, hasReports: true });
 
     return record;
   }
@@ -453,6 +564,7 @@ export class RunStore {
       hasApproval: existsSync(path.join(runDir, "approval.json")),
       hasScope: existsSync(path.join(runDir, "scope.json")),
       hasEvidenceLedger: existsSync(path.join(runDir, "evidence-ledger.jsonl")),
+      hasReports: existsSync(path.join(runDir, "reports")),
       hasApply: existsSync(path.join(runDir, "apply.json")),
       hasRollback: existsSync(path.join(runDir, "rollback.json"))
     });
@@ -483,6 +595,9 @@ export class RunStore {
       : undefined;
     const bugBountyEvidenceLedger = artifactPaths.evidenceLedger && existsSync(artifactPaths.evidenceLedger)
       ? readEvidenceLedger(artifactPaths.evidenceLedger)
+      : undefined;
+    const bugBountyReportDrafts = artifactPaths.reports && existsSync(artifactPaths.reports)
+      ? readReportDrafts(artifactPaths.reports)
       : undefined;
     const applyRecord = artifactPaths.apply && existsSync(artifactPaths.apply)
       ? readJson<ApplyRecord>(artifactPaths.apply)
@@ -517,6 +632,7 @@ export class RunStore {
       approvalRecord,
       bugBountyScope,
       bugBountyEvidenceLedger,
+      bugBountyReportDrafts,
       applyRecord,
       rollbackRecord,
       decisionLog,
@@ -612,6 +728,7 @@ export class RunStore {
       readonly hasApproval?: boolean;
       readonly hasScope?: boolean;
       readonly hasEvidenceLedger?: boolean;
+      readonly hasReports?: boolean;
       readonly hasApply?: boolean;
       readonly hasRollback?: boolean;
       readonly hasWorkspaceVerification?: boolean;
@@ -624,6 +741,7 @@ export class RunStore {
       hasApproval: options.hasApproval ?? preview.artifactPaths.approval !== undefined,
       hasScope: options.hasScope ?? preview.artifactPaths.scope !== undefined,
       hasEvidenceLedger: options.hasEvidenceLedger ?? preview.artifactPaths.evidenceLedger !== undefined,
+      hasReports: options.hasReports ?? preview.artifactPaths.reports !== undefined,
       hasApply: "hasApply" in options ? options.hasApply : preview.artifactPaths.apply !== undefined,
       hasRollback: "hasRollback" in options ? options.hasRollback : preview.artifactPaths.rollback !== undefined
     });
@@ -656,6 +774,15 @@ export function createEvidenceLeadId(now = new Date()): string {
   return `lead-${timestamp}-${randomBytes(3).toString("hex")}`;
 }
 
+export function createReportDraftId(now = new Date()): string {
+  const timestamp = now
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}Z$/, "Z")
+    .replace("T", "-");
+  return `report-${timestamp}-${randomBytes(3).toString("hex")}`;
+}
+
 export function isSafeRunId(runId: string): boolean {
   return /^run-\d{8}-\d{6}Z-[0-9a-f]{6}$/.test(runId);
 }
@@ -668,6 +795,7 @@ function createArtifactPaths(
     readonly hasApproval?: boolean;
     readonly hasScope?: boolean;
     readonly hasEvidenceLedger?: boolean;
+    readonly hasReports?: boolean;
     readonly hasApply?: boolean;
     readonly hasRollback?: boolean;
   }
@@ -688,6 +816,7 @@ function createArtifactPaths(
     approval: normalized.hasApproval ? path.join(runDir, "approval.json") : undefined,
     scope: normalized.hasScope ? path.join(runDir, "scope.json") : undefined,
     evidenceLedger: normalized.hasEvidenceLedger ? path.join(runDir, "evidence-ledger.jsonl") : undefined,
+    reports: normalized.hasReports ? path.join(runDir, "reports") : undefined,
     apply: normalized.hasApply ? path.join(runDir, "apply.json") : undefined,
     rollback: normalized.hasRollback ? path.join(runDir, "rollback.json") : undefined
   };
@@ -758,6 +887,20 @@ function readEvidenceLedger(filePath: string): BugBountyEvidenceLedger {
     };
   } catch {
     throw new Error("Malformed run artifact: evidence-ledger.jsonl.");
+  }
+}
+
+function readReportDrafts(reportsDir: string): readonly BugBountyReportDraftRecord[] {
+  try {
+    return readdirSync(reportsDir)
+      .filter((fileName) => fileName.endsWith(".json"))
+      .map((fileName) => readJson<BugBountyReportDraftRecord>(path.join(reportsDir, fileName)))
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    throw error;
   }
 }
 
@@ -955,6 +1098,159 @@ function redactEvidenceText(value: string): RedactedText {
   };
 }
 
+function calibrateSeverity(lead: BugBountyEvidenceRecord): BugBountySeverity {
+  if (lead.status === "duplicate-risk") {
+    return "low";
+  }
+  if (lead.status !== "confirmed") {
+    return lead.confidence === "high" ? "medium" : "informational";
+  }
+
+  const impact = lead.impact.toLowerCase();
+  if (impact.includes("admin") || impact.includes("write") || impact.includes("account takeover")) {
+    return "high";
+  }
+  if (impact.includes("cross-account") || impact.includes("cross tenant") || impact.includes("authorization")) {
+    return "medium";
+  }
+  if (impact.includes("exposure") || impact.includes("read")) {
+    return "medium";
+  }
+  return "low";
+}
+
+function severityRationale(lead: BugBountyEvidenceRecord, severity: BugBountySeverity): string {
+  if (lead.status !== "confirmed") {
+    return `Severity is conservative because the lead status is ${lead.status} and confidence is ${lead.confidence}.`;
+  }
+  return `Severity is based on recorded impact, confidence ${lead.confidence}, affected role ${lead.userRole ?? "not recorded"}, and program-specific rules still needing maintainer review.`;
+}
+
+function defaultReportTitle(lead: BugBountyEvidenceRecord, severity: BugBountySeverity): string {
+  const prefix = lead.status === "confirmed" ? "Confirmed" : "Potential";
+  const endpoint = lead.endpoint ? ` at ${lead.endpoint}` : "";
+  return `${prefix} ${severity} issue on ${lead.asset}${endpoint}`;
+}
+
+function buildReportSummary(lead: BugBountyEvidenceRecord): string {
+  return [
+    `This draft is generated from Dure evidence lead ${lead.id}.`,
+    `The recorded hypothesis is: ${lead.hypothesis}`,
+    `Current status is ${lead.status} with ${lead.confidence} confidence; Dure has not performed active testing or independent validation.`
+  ].join(" ");
+}
+
+function defaultReproductionSteps(lead: BugBountyEvidenceRecord): readonly string[] {
+  return [
+    `Start from an authorized test account with role: ${lead.userRole ?? "role not recorded"}.`,
+    `Use the in-scope asset ${lead.asset}${lead.endpoint ? ` and endpoint ${lead.endpoint}` : ""}.`,
+    lead.testPerformed ?? "Repeat the minimal-impact test described in the evidence ledger.",
+    "Compare the observed result with the expected authorization or validation behavior.",
+    "Stop once the issue is proven enough to report safely; do not access real user data."
+  ];
+}
+
+function defaultEvidenceLines(lead: BugBountyEvidenceRecord): readonly string[] {
+  return cleanList([
+    `Lead status: ${lead.status}.`,
+    `Confidence: ${lead.confidence}.`,
+    lead.requestSummary ? `Request: ${lead.requestSummary}` : undefined,
+    lead.responseSummary ? `Response: ${lead.responseSummary}` : undefined,
+    lead.evidence ? `Evidence note: ${lead.evidence}` : undefined,
+    `Recorded at: ${lead.createdAt}.`
+  ]);
+}
+
+function buildWhyThisMatters(lead: BugBountyEvidenceRecord): string {
+  return `If confirmed, this matters because the recorded impact is: ${lead.impact}`;
+}
+
+function defaultRemediation(lead: BugBountyEvidenceRecord): string {
+  const endpoint = lead.endpoint ? ` for ${lead.endpoint}` : "";
+  return `Review the authorization, validation, and object ownership checks${endpoint}. Enforce server-side access control for the affected role and add regression tests for the recorded scenario.`;
+}
+
+function defaultLimitations(lead: BugBountyEvidenceRecord): string {
+  const statusNote = lead.status === "confirmed"
+    ? "The lead is marked confirmed in the ledger, but severity and program-specific impact still require human review."
+    : `The lead is not confirmed; current status is ${lead.status}.`;
+  return `${statusNote} Dure generated this draft from stored evidence only and did not send requests, run scanners, exploit issues, or independently validate the finding.`;
+}
+
+function normalizeReportList(
+  input: readonly string[] | undefined,
+  fallback: readonly (string | undefined)[]
+): readonly string[] {
+  const source = input && input.length > 0 ? input : fallback;
+  const cleaned = source
+    .filter((value): value is string => value !== undefined)
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  return [...new Set(cleaned)];
+}
+
+function renderReportMarkdown(record: BugBountyReportDraftRecord): string {
+  return [
+    `# ${markdownLine(record.title)}`,
+    "",
+    `- Report ID: ${record.id}`,
+    `- Lead ID: ${record.leadId}`,
+    `- Severity: ${record.severity}`,
+    `- Confidence: ${record.confidence}`,
+    `- Duplicate risk: ${record.duplicateRisk ? "yes" : "no"}`,
+    `- Affected asset: ${markdownLine(record.affectedAsset)}`,
+    `- Affected endpoint/function: ${markdownLine(record.affectedEndpoint ?? "not recorded")}`,
+    `- Affected users/roles: ${record.affectedUsersOrRoles.map(markdownLine).join(", ") || "not recorded"}`,
+    "",
+    "## Summary",
+    "",
+    markdownParagraph(record.summary),
+    "",
+    "## Impact",
+    "",
+    markdownParagraph(record.impact),
+    "",
+    "## Reproduction Steps",
+    "",
+    ...record.reproductionSteps.map((step, index) => `${index + 1}. ${markdownLine(step)}`),
+    "",
+    "## Evidence",
+    "",
+    ...record.evidence.map((item) => `- ${markdownLine(item)}`),
+    "",
+    "## Why This Is A Security Issue",
+    "",
+    markdownParagraph(record.whyThisMatters),
+    "",
+    "## Recommended Remediation",
+    "",
+    markdownParagraph(record.remediation),
+    "",
+    "## Limitations And Scope Notes",
+    "",
+    markdownParagraph(record.limitations),
+    "",
+    ...record.scopeNotes.map((note) => `- ${markdownLine(note)}`),
+    "",
+    "## Suggested Retest",
+    "",
+    markdownParagraph(record.suggestedRetest),
+    "",
+    "## Safety Notes",
+    "",
+    ...record.safetyNotes.map((note) => `- ${markdownLine(note)}`),
+    ""
+  ].join("\n");
+}
+
+function markdownLine(value: string): string {
+  return value.replace(/\r?\n/g, " ").trim();
+}
+
+function markdownParagraph(value: string): string {
+  return markdownLine(value);
+}
+
 function normalizeScope(input: BugBountyScopeIntake): BugBountyScopeIntake {
   return {
     target: cleanRequiredString(input.target, "Scope target is required."),
@@ -1039,8 +1335,11 @@ function cleanOptionalString(value: string | undefined): string | undefined {
   return cleaned && cleaned.length > 0 ? cleaned : undefined;
 }
 
-function cleanList(values: readonly string[]): readonly string[] {
-  return values.map((value) => value.trim()).filter((value) => value.length > 0);
+function cleanList(values: readonly (string | undefined)[]): readonly string[] {
+  return values
+    .filter((value): value is string => value !== undefined)
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
 }
 
 function hasDangerousSignal(value: string): boolean {

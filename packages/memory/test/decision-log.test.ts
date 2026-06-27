@@ -499,6 +499,125 @@ test("run store records bug bounty evidence ledger entries with redaction", asyn
   assert.equal(preview.decisionLog.entries.at(-1)?.type, "bug_bounty_evidence_recorded");
 });
 
+test("run store drafts a bug bounty report from an evidence lead", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-report-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:45.000Z")
+  });
+
+  store.attachBugBountyScope(record.id, {
+    scope: sufficientScopeFixture(),
+    now: new Date("2026-06-27T00:00:46.000Z")
+  });
+  const evidence = store.recordBugBountyEvidence(record.id, {
+    evidence: evidenceFixture({ status: "confirmed", confidence: "high" }),
+    now: new Date("2026-06-27T00:00:47.000Z")
+  });
+  const report = store.draftBugBountyReport(record.id, {
+    draft: {
+      leadId: evidence.id,
+      title: "Confirmed cross-account order detail exposure",
+      severity: "medium",
+      affectedUsersOrRoles: ["user"],
+      reproductionSteps: ["Use two authorized test accounts.", "Request the order detail endpoint with the second account's object id."],
+      remediation: "Enforce object ownership checks on the order detail endpoint.",
+      limitations: "Only scoped, redacted evidence is included in this draft.",
+      duplicateRisk: false
+    },
+    now: new Date("2026-06-27T00:00:48.000Z")
+  });
+  const preview = store.loadPreview(record.id);
+
+  assert.match(report.id, /^report-20260627-000048Z-[0-9a-f]{6}$/);
+  assert.equal(report.leadId, evidence.id);
+  assert.equal(report.severity, "medium");
+  assert.equal(report.title, "Confirmed cross-account order detail exposure");
+  assert.ok(existsSync(report.markdownPath));
+  assert.match(await readFile(report.markdownPath, "utf8"), /## Reproduction Steps/);
+  assert.match(await readFile(report.markdownPath, "utf8"), /## Recommended Remediation/);
+  assert.equal(preview.bugBountyReportDrafts?.length, 1);
+  assert.equal(preview.bugBountyReportDrafts?.[0].id, report.id);
+  assert.equal(preview.decisionLog.entries.at(-1)?.type, "bug_bounty_report_drafted");
+});
+
+test("run store prevents inflated report severity for unconfirmed leads", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-report-severity-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:49.000Z")
+  });
+
+  store.attachBugBountyScope(record.id, {
+    scope: sufficientScopeFixture(),
+    now: new Date("2026-06-27T00:00:50.000Z")
+  });
+  const evidence = store.recordBugBountyEvidence(record.id, {
+    evidence: evidenceFixture({ status: "testing", confidence: "medium" }),
+    now: new Date("2026-06-27T00:00:51.000Z")
+  });
+
+  assert.throws(
+    () => store.draftBugBountyReport(record.id, { draft: { leadId: evidence.id, severity: "high" } }),
+    /requires a confirmed evidence lead/
+  );
+
+  const report = store.draftBugBountyReport(record.id, {
+    draft: { leadId: evidence.id },
+    now: new Date("2026-06-27T00:00:52.000Z")
+  });
+  assert.equal(report.severity, "informational");
+  assert.match(report.limitations, /not confirmed/);
+});
+
+test("run store rejects report drafts from blocked and non-issue leads", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-report-blocked-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:53.000Z")
+  });
+
+  store.attachBugBountyScope(record.id, {
+    scope: sufficientScopeFixture(),
+    now: new Date("2026-06-27T00:00:54.000Z")
+  });
+  const blocked = store.recordBugBountyEvidence(record.id, {
+    evidence: evidenceFixture({ status: "blocked", nextAction: "Clarify program permission." }),
+    now: new Date("2026-06-27T00:00:55.000Z")
+  });
+  const nonIssue = store.recordBugBountyEvidence(record.id, {
+    evidence: evidenceFixture({ status: "non-issue", impact: "Expected behavior." }),
+    now: new Date("2026-06-27T00:00:56.000Z")
+  });
+
+  assert.throws(
+    () => store.draftBugBountyReport(record.id, { draft: { leadId: blocked.id } }),
+    /blocked lead/
+  );
+  assert.throws(
+    () => store.draftBugBountyReport(record.id, { draft: { leadId: nonIssue.id } }),
+    /non-issue lead/
+  );
+});
+
 test("run store blocks evidence recording without sufficient bug bounty scope", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-evidence-scope-"));
   const store = new RunStore(path.join(tempRoot, ".dure", "runs"));

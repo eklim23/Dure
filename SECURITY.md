@@ -15,6 +15,7 @@ Dure is built around conservative agent control.
 - Verification output is length-limited and redacts secret-like values before persistence.
 - Bug bounty evidence ledger entries are user-supplied records only; Dure does not send requests, scan targets, exploit issues, or confirm findings in v0.1.
 - Evidence ledger persistence applies local redaction for authorization headers, cookies, tokens, passwords, API keys, sessions, CSRF values, bearer tokens, and email-like personal data.
+- Bug bounty report drafts are generated only from stored, redacted evidence; Dure does not submit reports, contact targets, or validate findings in v0.1.
 - v0.1 does not execute untrusted skills.
 
 ## Responsible Disclosure
