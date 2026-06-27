@@ -193,6 +193,110 @@ test("run store rejects duplicate, non-patch, and unverified approvals", async (
   assert.throws(() => store.approveRun(failedRecord.id), /verification has not accepted/);
 });
 
+test("run store applies an approved patch to a controlled workspace", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-apply-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: patchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:12.000Z")
+  });
+
+  store.approveRun(record.id, { now: new Date("2026-06-27T00:00:13.000Z") });
+  const applied = store.applyRun(record.id, { now: new Date("2026-06-27T00:00:14.000Z") });
+  const preview = store.loadPreview(record.id);
+  const appliedFile = path.join(tempRoot, ".dure", "workspaces", record.id, "package.json");
+
+  assert.equal(applied.nextStatus, "applied");
+  assert.equal(preview.metadata.status, "applied");
+  assert.equal(preview.applyRecord?.runId, record.id);
+  assert.equal(preview.rollbackRecord?.rollbackImplemented, false);
+  assert.ok(existsSync(appliedFile));
+  assert.equal(preview.decisionLog.entries.at(-1)?.type, "patch_applied");
+  assert.throws(() => store.applyRun(record.id), /current status is applied/);
+});
+
+test("run store backs up modified files during apply", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-apply-modify-"));
+  const workspaceRoot = path.join(tempRoot, "workspace");
+  const target = path.join(workspaceRoot, "README.md");
+  await mkdir(workspaceRoot, { recursive: true });
+  await writeFile(target, "old content\n", "utf8");
+
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: modifyPatchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:15.000Z")
+  });
+
+  store.approveRun(record.id, { now: new Date("2026-06-27T00:00:16.000Z") });
+  const applied = store.applyRun(record.id, {
+    workspaceRoot,
+    now: new Date("2026-06-27T00:00:17.000Z")
+  });
+  const modified = applied.files[0];
+  const backupPath = modified.backupPath;
+
+  assert.equal(modified.operation, "modify");
+  assert.ok(backupPath);
+  assert.ok(existsSync(backupPath));
+  assert.equal(await readFile(backupPath, "utf8"), "old content\n");
+  assert.equal(await readFile(target, "utf8"), "new content\n");
+  assert.notEqual(modified.previousHash, modified.newHash);
+});
+
+test("run store rejects unsafe apply requests", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-apply-reject-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const proposed = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: patchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:18.000Z")
+  });
+  const unsafe = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: unsafePatchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:19.000Z")
+  });
+  const deletion = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: deletePatchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:20.000Z")
+  });
+
+  assert.throws(() => store.applyRun(proposed.id), /current status is proposed/);
+  store.approveRun(unsafe.id, { now: new Date("2026-06-27T00:00:21.000Z") });
+  store.approveRun(deletion.id, { now: new Date("2026-06-27T00:00:22.000Z") });
+  assert.throws(() => store.applyRun(unsafe.id), /Unsafe patch path/);
+  assert.throws(() => store.applyRun(deletion.id), /Delete operation is not allowed/);
+});
+
 test("run store records bug bounty scope intake", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-scope-"));
   const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
@@ -326,7 +430,8 @@ function patchProposalFixture(): TaskModeProposal {
       {
         path: "package.json",
         operation: "create",
-        rationale: "Declare a minimal runnable package."
+        rationale: "Declare a minimal runnable package.",
+        content: JSON.stringify({ name: "generated-memory-mvp" }, null, 2)
       }
     ],
     policy: {
@@ -336,6 +441,56 @@ function patchProposalFixture(): TaskModeProposal {
     },
     createdAt: "2026-06-27T00:00:00.000Z",
     status: "accepted"
+  };
+}
+
+function modifyPatchProposalFixture(): TaskModeProposal {
+  const base = patchProposalFixture();
+  assert.equal(base.kind, "patch");
+  return {
+    ...base,
+    id: "patch-modify-test",
+    changes: [
+      {
+        path: "README.md",
+        operation: "modify",
+        rationale: "Update existing documentation.",
+        content: "new content\n"
+      }
+    ]
+  };
+}
+
+function unsafePatchProposalFixture(): TaskModeProposal {
+  const base = patchProposalFixture();
+  assert.equal(base.kind, "patch");
+  return {
+    ...base,
+    id: "patch-unsafe-test",
+    changes: [
+      {
+        path: "../outside.txt",
+        operation: "create",
+        rationale: "Unsafe traversal path.",
+        content: "bad\n"
+      }
+    ]
+  };
+}
+
+function deletePatchProposalFixture(): TaskModeProposal {
+  const base = patchProposalFixture();
+  assert.equal(base.kind, "patch");
+  return {
+    ...base,
+    id: "patch-delete-test",
+    changes: [
+      {
+        path: "README.md",
+        operation: "delete",
+        rationale: "Deletion requires a separate approval."
+      }
+    ]
   };
 }
 

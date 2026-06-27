@@ -1,7 +1,9 @@
-import { randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { appendFileSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type {
+  AppliedPatchFile,
+  ApplyRecord,
   ApprovalDecision,
   ApprovalRecord,
   AssistantAgentRole,
@@ -12,11 +14,13 @@ import type {
   DecisionLogEntry,
   DecisionLogEntryType,
   MoochackerAssessment,
+  PatchChange,
   RunArtifactPaths,
   RunMetadata,
   RunPreview,
   RunRecord,
   RunStatus,
+  RollbackRecord,
   SafetyDecision,
   TaskModeProposal,
   VerificationResult
@@ -61,6 +65,11 @@ export interface ApprovalDecisionInput {
 
 export interface AttachBugBountyScopeInput {
   readonly scope: BugBountyScopeIntake;
+  readonly now?: Date;
+}
+
+export interface ApplyRunInput {
+  readonly workspaceRoot?: string;
   readonly now?: Date;
 }
 
@@ -170,6 +179,118 @@ export class RunStore {
     return record;
   }
 
+  applyRun(runId: string, input: ApplyRunInput = {}): ApplyRecord {
+    const now = input.now ?? new Date();
+    const preview = this.loadPreview(runId);
+    if (preview.metadata.status !== "approved") {
+      throw new Error(`Run ${runId} cannot be applied; current status is ${preview.metadata.status}.`);
+    }
+    if (!preview.approvalRecord || preview.approvalRecord.decision !== "approved") {
+      throw new Error(`Run ${runId} cannot be applied without an approved approval record.`);
+    }
+    if (preview.proposal.kind !== "patch") {
+      throw new Error(`Run ${runId} is not a patch proposal (${preview.proposal.kind}).`);
+    }
+    if (preview.proposal.status !== "accepted") {
+      throw new Error(`Run ${runId} cannot be applied because the patch proposal is ${preview.proposal.status}.`);
+    }
+    if (preview.verificationResult?.accepted !== true) {
+      throw new Error(`Run ${runId} cannot be applied because verification has not accepted the proposal.`);
+    }
+    if (preview.approvalRecord.proposalId !== preview.metadata.proposalId) {
+      throw new Error(`Run ${runId} approval record does not match the current proposal.`);
+    }
+    if (preview.artifactPaths.apply && existsSync(preview.artifactPaths.apply)) {
+      throw new Error(`Run ${runId} has already been applied.`);
+    }
+
+    const workspaceRoot = path.resolve(input.workspaceRoot ?? path.join(this.root, "..", "workspaces", runId));
+    const backupRoot = path.join(preview.artifactPaths.runDir, "backups", createApplyTimestamp(now), "files");
+    const changes = preview.proposal.changes.map((change) => preparePatchChange(change, workspaceRoot, backupRoot));
+
+    mkdirSync(workspaceRoot, { recursive: true });
+    mkdirSync(backupRoot, { recursive: true });
+
+    const appliedFiles: AppliedPatchFile[] = [];
+    for (const change of changes) {
+      const previousHash = change.previousExists ? sha256(readFileSync(change.targetPath)) : undefined;
+      if (change.previousExists && change.backupPath) {
+        mkdirSync(path.dirname(change.backupPath), { recursive: true });
+        copyFileSync(change.targetPath, change.backupPath);
+      }
+      mkdirSync(path.dirname(change.targetPath), { recursive: true });
+      if (change.operation === "create") {
+        writeFileSync(change.targetPath, change.content, { encoding: "utf8", flag: "wx" });
+      } else {
+        writeFileSync(change.targetPath, change.content, "utf8");
+      }
+
+      appliedFiles.push({
+        path: change.relativePath,
+        operation: change.operation,
+        targetPath: change.targetPath,
+        backupPath: change.backupPath,
+        previousHash,
+        newHash: sha256(readFileSync(change.targetPath))
+      });
+    }
+
+    const applyRecord: ApplyRecord = {
+      runId,
+      proposalId: preview.metadata.proposalId,
+      appliedBy: "user-approved-controlled-apply",
+      createdAt: now.toISOString(),
+      workspaceRoot,
+      backupRoot,
+      previousStatus: preview.metadata.status,
+      nextStatus: "applied",
+      files: appliedFiles,
+      nextRecommendedAction: "Run approved verification in a later stage before marking this run verified."
+    };
+    const rollbackRecord: RollbackRecord = {
+      runId,
+      proposalId: preview.metadata.proposalId,
+      createdAt: now.toISOString(),
+      workspaceRoot,
+      backupRoot,
+      createdFiles: appliedFiles.filter((file) => file.operation === "create").map((file) => file.path),
+      modifiedFiles: appliedFiles.filter((file) => file.operation === "modify").map((file) => file.path),
+      backupFileMap: Object.fromEntries(
+        appliedFiles.flatMap((file) => file.backupPath ? [[file.path, file.backupPath]] : [])
+      ),
+      previousHashes: Object.fromEntries(
+        appliedFiles.flatMap((file) => file.previousHash ? [[file.path, file.previousHash]] : [])
+      ),
+      newHashes: Object.fromEntries(appliedFiles.map((file) => [file.path, file.newHash])),
+      rollbackImplemented: false,
+      note: "Rollback execution is intentionally not implemented in Stage 7; this metadata enables a later rollback command."
+    };
+
+    writeJson(path.join(preview.artifactPaths.runDir, "apply.json"), applyRecord);
+    writeJson(path.join(preview.artifactPaths.runDir, "rollback.json"), rollbackRecord);
+    appendJsonLine(preview.artifactPaths.decisionLog, {
+      type: "patch_applied",
+      message: "Approved patch proposal was applied to a controlled workspace.",
+      data: {
+        runId,
+        proposalId: applyRecord.proposalId,
+        workspaceRoot,
+        backupRoot,
+        files: appliedFiles.map((file) => ({
+          path: file.path,
+          operation: file.operation,
+          backupPath: file.backupPath,
+          previousHash: file.previousHash,
+          newHash: file.newHash
+        }))
+      },
+      timestamp: now.toISOString()
+    } satisfies DecisionLogEntry);
+    this.updateMetadata(preview, "applied", now, { hasApply: true, hasRollback: true });
+
+    return applyRecord;
+  }
+
   loadPreview(runId: string): RunPreview {
     if (!isSafeRunId(runId)) {
       throw new Error(`Invalid run id: ${runId}`);
@@ -179,7 +300,9 @@ export class RunStore {
     const artifactPaths = createArtifactPaths(runDir, {
       hasVerification: existsSync(path.join(runDir, "verification.json")),
       hasApproval: existsSync(path.join(runDir, "approval.json")),
-      hasScope: existsSync(path.join(runDir, "scope.json"))
+      hasScope: existsSync(path.join(runDir, "scope.json")),
+      hasApply: existsSync(path.join(runDir, "apply.json")),
+      hasRollback: existsSync(path.join(runDir, "rollback.json"))
     });
     if (!existsSync(artifactPaths.metadata)) {
       throw new Error(`Run not found: ${runId}`);
@@ -202,6 +325,12 @@ export class RunStore {
       : undefined;
     const bugBountyScope = artifactPaths.scope && existsSync(artifactPaths.scope)
       ? readJson<BugBountyScopeRecord>(artifactPaths.scope)
+      : undefined;
+    const applyRecord = artifactPaths.apply && existsSync(artifactPaths.apply)
+      ? readJson<ApplyRecord>(artifactPaths.apply)
+      : undefined;
+    const rollbackRecord = artifactPaths.rollback && existsSync(artifactPaths.rollback)
+      ? readJson<RollbackRecord>(artifactPaths.rollback)
       : undefined;
     const decisionLog = readDecisionLog(artifactPaths.decisionLog);
 
@@ -228,6 +357,8 @@ export class RunStore {
       verificationResult,
       approvalRecord,
       bugBountyScope,
+      applyRecord,
+      rollbackRecord,
       decisionLog,
       artifactPaths
     };
@@ -317,12 +448,19 @@ export class RunStore {
     preview: RunPreview,
     status: RunStatus,
     now: Date,
-    options: { readonly hasApproval?: boolean; readonly hasScope?: boolean }
+    options: {
+      readonly hasApproval?: boolean;
+      readonly hasScope?: boolean;
+      readonly hasApply?: boolean;
+      readonly hasRollback?: boolean;
+    }
   ): void {
     const artifactPaths = createArtifactPaths(preview.artifactPaths.runDir, {
       hasVerification: preview.artifactPaths.verification !== undefined,
       hasApproval: options.hasApproval ?? preview.artifactPaths.approval !== undefined,
-      hasScope: options.hasScope ?? preview.artifactPaths.scope !== undefined
+      hasScope: options.hasScope ?? preview.artifactPaths.scope !== undefined,
+      hasApply: "hasApply" in options ? options.hasApply : preview.artifactPaths.apply !== undefined,
+      hasRollback: "hasRollback" in options ? options.hasRollback : preview.artifactPaths.rollback !== undefined
     });
     const metadata: RunMetadata = {
       ...preview.metadata,
@@ -354,6 +492,8 @@ function createArtifactPaths(
     readonly hasVerification?: boolean;
     readonly hasApproval?: boolean;
     readonly hasScope?: boolean;
+    readonly hasApply?: boolean;
+    readonly hasRollback?: boolean;
   }
 ): RunArtifactPaths {
   const normalized = typeof options === "boolean" ? { hasVerification: options } : options;
@@ -367,7 +507,9 @@ function createArtifactPaths(
     metadata: path.join(runDir, "metadata.json"),
     verification: normalized.hasVerification ? path.join(runDir, "verification.json") : undefined,
     approval: normalized.hasApproval ? path.join(runDir, "approval.json") : undefined,
-    scope: normalized.hasScope ? path.join(runDir, "scope.json") : undefined
+    scope: normalized.hasScope ? path.join(runDir, "scope.json") : undefined,
+    apply: normalized.hasApply ? path.join(runDir, "apply.json") : undefined,
+    rollback: normalized.hasRollback ? path.join(runDir, "rollback.json") : undefined
   };
 }
 
@@ -413,6 +555,99 @@ function readDecisionLog(filePath: string): DecisionLog {
   } catch {
     throw new Error("Malformed run artifact: decision-log.jsonl.");
   }
+}
+
+interface PreparedPatchChange {
+  readonly relativePath: string;
+  readonly operation: "create" | "modify";
+  readonly content: string;
+  readonly targetPath: string;
+  readonly backupPath?: string;
+  readonly previousExists: boolean;
+}
+
+function preparePatchChange(change: PatchChange, workspaceRoot: string, backupRoot: string): PreparedPatchChange {
+  if (change.operation === "delete") {
+    throw new Error(`Delete operation is not allowed in controlled apply: ${change.path}`);
+  }
+  if (!isSafePatchPath(change.path)) {
+    throw new Error(`Unsafe patch path rejected: ${change.path}`);
+  }
+  if (change.content === undefined) {
+    throw new Error(`Patch change is missing content: ${change.path}`);
+  }
+
+  const relativePath = change.path.replace(/\\/g, "/");
+  const targetPath = path.resolve(workspaceRoot, relativePath);
+  if (!isPathInside(workspaceRoot, targetPath)) {
+    throw new Error(`Patch path escapes the controlled workspace: ${change.path}`);
+  }
+
+  const previousExists = existsSync(targetPath);
+  assertNoSymlinkAncestor(workspaceRoot, targetPath);
+  if (change.operation === "create" && previousExists) {
+    throw new Error(`Create operation would overwrite an existing file: ${change.path}`);
+  }
+  if (change.operation === "modify" && !previousExists) {
+    throw new Error(`Modify operation requires an existing file: ${change.path}`);
+  }
+  if (change.operation === "modify" && !lstatSync(targetPath).isFile()) {
+    throw new Error(`Modify operation requires a regular file: ${change.path}`);
+  }
+
+  return {
+    relativePath,
+    operation: change.operation,
+    content: change.content,
+    targetPath,
+    backupPath: previousExists ? path.join(backupRoot, relativePath) : undefined,
+    previousExists
+  };
+}
+
+function isSafePatchPath(candidate: string): boolean {
+  if (candidate.trim().length === 0) {
+    return false;
+  }
+  if (path.isAbsolute(candidate) || /^[a-zA-Z]:[\\/]/.test(candidate) || candidate.includes("\0")) {
+    return false;
+  }
+
+  const segments = candidate.replace(/\\/g, "/").split("/");
+  return segments.every((segment) => !["", ".", "..", ".dure", ".git", "node_modules"].includes(segment));
+}
+
+function isPathInside(root: string, candidate: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative.length === 0 || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function assertNoSymlinkAncestor(root: string, targetPath: string): void {
+  const relative = path.relative(path.resolve(root), path.resolve(targetPath));
+  const segments = relative.split(path.sep).filter((segment) => segment.length > 0);
+  let current = path.resolve(root);
+
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    if (!existsSync(current)) {
+      return;
+    }
+    if (lstatSync(current).isSymbolicLink()) {
+      throw new Error(`Patch path uses a symbolic link and is not allowed: ${targetPath}`);
+    }
+  }
+}
+
+function createApplyTimestamp(now: Date): string {
+  return now
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}Z$/, "Z")
+    .replace("T", "-");
+}
+
+function sha256(value: Buffer): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function normalizeScope(input: BugBountyScopeIntake): BugBountyScopeIntake {

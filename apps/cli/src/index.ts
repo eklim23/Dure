@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { AssistantCore } from "@dure/assistant-core";
 import type {
+  ApplyRecord,
   ApprovalRecord,
   AssistantRunResult,
   BugBountyScopeIntake,
@@ -58,6 +59,15 @@ try {
     process.exit(0);
   }
 
+  if (parsed.command === "apply") {
+    if (!parsed.runId) {
+      throw new Error("apply requires a run id.");
+    }
+    const apply = new RunStore().applyRun(parsed.runId, { workspaceRoot: parsed.workspaceRoot });
+    printApply(apply);
+    process.exit(0);
+  }
+
   if (!parsed.request) {
     printUsage();
     process.exit(args.length === 0 ? 0 : 1);
@@ -75,11 +85,12 @@ try {
 }
 
 interface ParsedArgs {
-  readonly command?: "run" | "ask" | "preview" | "approve" | "reject" | "scope";
+  readonly command?: "run" | "ask" | "preview" | "approve" | "reject" | "scope" | "apply";
   readonly request?: string;
   readonly previewRunId?: string;
   readonly runId?: string;
   readonly reason?: string;
+  readonly workspaceRoot?: string;
   readonly scopeIntake?: BugBountyScopeIntake;
   readonly modeOverride?: TaskMode;
   readonly persist: boolean;
@@ -129,6 +140,11 @@ function parseArgs(tokens: readonly string[]): ParsedArgs {
   if (commandOrRequest === "scope") {
     rejectRunCommandGlobalOptions("scope", modeOverride, persist);
     return parseScopeCommand(rest, persist);
+  }
+
+  if (commandOrRequest === "apply") {
+    rejectRunCommandGlobalOptions("apply", modeOverride, persist);
+    return parseApplyCommand(rest, persist);
   }
 
   if (commandOrRequest === "run" || commandOrRequest === "ask") {
@@ -203,6 +219,21 @@ function parseScopeCommand(tokens: readonly string[], persist: boolean): ParsedA
     command: "scope",
     runId,
     scopeIntake,
+    persist
+  };
+}
+
+function parseApplyCommand(tokens: readonly string[], persist: boolean): ParsedArgs {
+  const [runId, ...rest] = tokens;
+  if (!runId || runId.trim().length === 0) {
+    throw new Error("apply requires exactly one run id.");
+  }
+
+  const options = parseCommandOptions(rest, ["workspace"]);
+  return {
+    command: "apply",
+    runId,
+    workspaceRoot: firstOption(options, "workspace"),
     persist
   };
 }
@@ -342,6 +373,7 @@ function printUsage(): void {
   console.log("  dure preview <run-id>");
   console.log('  dure approve <run-id> --reason "Reviewed the patch proposal"');
   console.log('  dure reject <run-id> --reason "Scope is unclear"');
+  console.log('  dure apply <run-id> --workspace ".dure/workspaces/<run-id>"');
   console.log('  dure scope <run-id> --target "api.example.com" --in-scope "api.example.com" --forbidden "DoS,brute force"');
 }
 
@@ -458,6 +490,27 @@ function printScope(record: BugBountyScopeRecord): void {
       ? record.moochackerAssessment.clarifyingQuestions
       : ["Scope intake is sufficient for passive planning."]
   );
+}
+
+function printApply(record: ApplyRecord): void {
+  console.log("Dure Apply");
+  console.log("");
+  section("Run", [
+    `id: ${record.runId}`,
+    `previous status: ${record.previousStatus}`,
+    `new status: ${record.nextStatus}`,
+    `proposal: ${record.proposalId}`
+  ]);
+  section("Workspace", [`root: ${record.workspaceRoot}`]);
+  section(
+    "Changes",
+    record.files.map((file) => `${file.operation}: ${file.path}`)
+  );
+  section("Rollback", [
+    "metadata: apply.json and rollback.json",
+    `backups: ${record.backupRoot}`
+  ]);
+  section("Next", [record.nextRecommendedAction]);
 }
 
 function section(title: string, lines: readonly string[]): void {

@@ -256,6 +256,7 @@ export type DecisionLogEntryType =
   | "safety_decision"
   | "approval_decision"
   | "bug_bounty_scope_intake"
+  | "patch_applied"
   | "inferred_goal"
   | "mvp_scope_decision"
   | "agent_comments"
@@ -289,6 +290,8 @@ export interface RunArtifactPaths {
   readonly verification?: string;
   readonly approval?: string;
   readonly scope?: string;
+  readonly apply?: string;
+  readonly rollback?: string;
 }
 
 export type ApprovalDecision = "approved" | "rejected";
@@ -325,6 +328,43 @@ export interface BugBountyScopeRecord extends BugBountyScopeIntake {
   readonly moochackerAssessment: MoochackerAssessment;
 }
 
+export interface AppliedPatchFile {
+  readonly path: string;
+  readonly operation: "create" | "modify";
+  readonly targetPath: string;
+  readonly backupPath?: string;
+  readonly previousHash?: string;
+  readonly newHash: string;
+}
+
+export interface ApplyRecord {
+  readonly runId: string;
+  readonly proposalId: string;
+  readonly appliedBy: "user-approved-controlled-apply";
+  readonly createdAt: string;
+  readonly workspaceRoot: string;
+  readonly backupRoot: string;
+  readonly previousStatus: RunStatus;
+  readonly nextStatus: "applied";
+  readonly files: readonly AppliedPatchFile[];
+  readonly nextRecommendedAction: string;
+}
+
+export interface RollbackRecord {
+  readonly runId: string;
+  readonly proposalId: string;
+  readonly createdAt: string;
+  readonly workspaceRoot: string;
+  readonly backupRoot: string;
+  readonly createdFiles: readonly string[];
+  readonly modifiedFiles: readonly string[];
+  readonly backupFileMap: Record<string, string>;
+  readonly previousHashes: Record<string, string>;
+  readonly newHashes: Record<string, string>;
+  readonly rollbackImplemented: false;
+  readonly note: string;
+}
+
 export interface RunRecord {
   readonly id: string;
   readonly status: RunStatus;
@@ -356,6 +396,8 @@ export interface RunPreview {
   readonly verificationResult?: VerificationResult;
   readonly approvalRecord?: ApprovalRecord;
   readonly bugBountyScope?: BugBountyScopeRecord;
+  readonly applyRecord?: ApplyRecord;
+  readonly rollbackRecord?: RollbackRecord;
   readonly decisionLog: DecisionLog;
   readonly artifactPaths: RunArtifactPaths;
 }

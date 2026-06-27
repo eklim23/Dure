@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -70,6 +71,39 @@ test("approve command rejects non-patch proposals", async () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /not a patch proposal/);
+});
+
+test("apply command writes an approved patch to a controlled workspace", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-apply-"));
+  const workspaceRoot = path.join(tempRoot, "workspace");
+  const record = persistRun(tempRoot, patchProposalFixture(), "development");
+
+  const approval = runCli(tempRoot, ["approve", record.id, "--reason", "Reviewed preview output"]);
+  const applied = runCli(tempRoot, ["apply", record.id, "--workspace", workspaceRoot]);
+  const preview = runCli(tempRoot, ["preview", record.id]);
+  const targetFile = path.join(workspaceRoot, "package.json");
+
+  assert.equal(approval.status, 0, approval.stderr);
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.match(applied.stdout, /Dure Apply/);
+  assert.match(applied.stdout, /new status: applied/);
+  assert.ok(existsSync(targetFile));
+  assert.match(await readFile(targetFile, "utf8"), /generated-cli-mvp/);
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.match(preview.stdout, /run status: applied/);
+});
+
+test("apply command rejects duplicate apply", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-apply-duplicate-"));
+  const workspaceRoot = path.join(tempRoot, "workspace");
+  const record = persistRun(tempRoot, patchProposalFixture(), "development");
+
+  assert.equal(runCli(tempRoot, ["approve", record.id]).status, 0);
+  assert.equal(runCli(tempRoot, ["apply", record.id, "--workspace", workspaceRoot]).status, 0);
+  const duplicate = runCli(tempRoot, ["apply", record.id, "--workspace", workspaceRoot]);
+
+  assert.notEqual(duplicate.status, 0);
+  assert.match(duplicate.stderr, /current status is applied/);
 });
 
 test("scope command records bug bounty scope intake", async () => {
@@ -201,7 +235,8 @@ function patchProposalFixture(): TaskModeProposal {
       {
         path: "package.json",
         operation: "create",
-        rationale: "Declare a minimal runnable package."
+        rationale: "Declare a minimal runnable package.",
+        content: JSON.stringify({ name: "generated-cli-mvp" }, null, 2)
       }
     ],
     policy: {

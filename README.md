@@ -91,6 +91,15 @@ corepack pnpm cli -- reject <run-id> --reason "Needs a narrower scope"
 
 Approval records `.dure/runs/<run-id>/approval.json`, updates run metadata to `approved` or `rejected`, and appends to `decision-log.jsonl`. It does not apply files, run commands, commit, push, or execute tests.
 
+Apply an approved patch to a controlled workspace:
+
+```bash
+corepack pnpm cli -- apply <run-id>
+corepack pnpm cli -- apply <run-id> --workspace C:\path\to\controlled-workspace
+```
+
+Without `--workspace`, Dure applies into `.dure/workspaces/<run-id>`. Apply requires an approved, verified patch proposal, writes only create/modify operations, blocks deletes and unsafe paths, records `apply.json` and `rollback.json`, and does not run verification or git commands.
+
 Record bug bounty scope intake:
 
 ```bash
@@ -166,6 +175,21 @@ Scope:
   - forbidden: DoS, brute force
 ```
 
+Controlled apply example:
+
+```text
+Dure Apply
+
+Run:
+  - id: run-20260627-000003Z-abc123
+  - previous status: approved
+  - new status: applied
+
+Changes:
+  - create: package.json
+  - create: src/index.js
+```
+
 Bug bounty example:
 
 ```text
@@ -212,6 +236,7 @@ examples/                Future example projects
 - Task mode routing is keyword/signal based.
 - MoochackerAgent produces structured bug bounty safety guidance only; active testing, target access, and external requests are not executed.
 - Approval records are durable gates for later controlled apply; approval itself does not modify files.
+- Controlled apply writes only approved patch content into a controlled workspace and records rollback metadata, but rollback execution is not implemented yet.
 - Test, lint, typecheck, and dependency audit checks are placeholders.
 - Operations and productivity integrations are declarations only.
 - Patch proposals are structured data and are not automatically applied.

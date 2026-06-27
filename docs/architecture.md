@@ -36,6 +36,7 @@ User Natural Language Input
    - `dure preview <run-id>`
    - `dure approve <run-id>`
    - `dure reject <run-id>`
+   - `dure apply <run-id>`
    - `dure scope <run-id>`
 
 2. Assistant Core
@@ -76,7 +77,7 @@ User Natural Language Input
 
 8. Controlled Execution
 
-   Development patches are proposals, not automatic edits. `approve` and `reject` create durable approval decisions under `.dure/runs/<run-id>/approval.json`; they do not apply files or execute commands. Bug Bounty Mode produces scope and evidence plans only until explicit authorization and rules of engagement are known.
+   Development patches are proposals, not automatic edits. `approve` and `reject` create durable approval decisions under `.dure/runs/<run-id>/approval.json`; they do not apply files or execute commands. `apply` requires an approved patch run and writes create/modify operations only into a controlled workspace, recording `apply.json`, `rollback.json`, backups, and a decision-log event. Bug Bounty Mode produces scope and evidence plans only until explicit authorization and rules of engagement are known.
 
 9. Verification / Safety Gate
 
@@ -88,7 +89,7 @@ User Natural Language Input
 
 11. Memory / Decision Log
 
-   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, approval decisions, bug bounty scope intake, and next recommended step.
+   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, approval decisions, controlled apply records, bug bounty scope intake, and next recommended step.
 
 ## MVP Ladder For Development Mode
 
