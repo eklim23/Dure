@@ -18,12 +18,13 @@
 - Controlled apply into a safe workspace
 - Applied workspace verification with allow-listed package scripts
 - Minimal bug bounty scope intake persistence
+- Bug bounty evidence ledger persistence with redaction
 
 ## v0.2
 
 - Real LLM provider interface wiring
 - Project file indexing
-- Evidence ledger persistence
+- Evidence ledger update/edit/export commands
 - Richer Development Mode project-state detection
 - Security checklist engine
 - Persistent decision logs

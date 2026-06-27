@@ -8,6 +8,9 @@ import type {
   ApprovalRecord,
   AssistantAgentRole,
   AssistantRequestContext,
+  BugBountyEvidenceInput,
+  BugBountyEvidenceLedger,
+  BugBountyEvidenceRecord,
   BugBountyScopeIntake,
   BugBountyScopeRecord,
   DecisionLog,
@@ -68,6 +71,11 @@ export interface ApprovalDecisionInput {
 
 export interface AttachBugBountyScopeInput {
   readonly scope: BugBountyScopeIntake;
+  readonly now?: Date;
+}
+
+export interface RecordBugBountyEvidenceInput {
+  readonly evidence: BugBountyEvidenceInput;
   readonly now?: Date;
 }
 
@@ -185,6 +193,67 @@ export class RunStore {
       timestamp: now.toISOString()
     } satisfies DecisionLogEntry);
     this.updateMetadata(preview, preview.metadata.status, now, { hasScope: true });
+
+    return record;
+  }
+
+  recordBugBountyEvidence(runId: string, input: RecordBugBountyEvidenceInput): BugBountyEvidenceRecord {
+    const now = input.now ?? new Date();
+    const preview = this.loadPreview(runId);
+    if (preview.proposal.kind !== "bug_bounty_review") {
+      throw new Error(`Run ${runId} is not a bug bounty proposal (${preview.proposal.kind}).`);
+    }
+    if (!preview.bugBountyScope) {
+      throw new Error(`Run ${runId} cannot record evidence before bug bounty scope intake is recorded.`);
+    }
+    if (preview.bugBountyScope.moochackerAssessment.safetyLevel === "blocked") {
+      throw new Error(`Run ${runId} cannot record evidence because MoochackerAgent marked scope safety as blocked.`);
+    }
+    if (preview.bugBountyScope.moochackerAssessment.scopeStatus !== "sufficient" && input.evidence.status !== "blocked") {
+      throw new Error(`Run ${runId} can only record blocked evidence until scope intake is sufficient.`);
+    }
+
+    const normalized = normalizeEvidence(input.evidence);
+    const redacted = redactEvidence(normalized);
+    const record: BugBountyEvidenceRecord = {
+      ...redacted.value,
+      id: createEvidenceLeadId(now),
+      runId,
+      recordedBy: "user",
+      createdAt: now.toISOString(),
+      requestResponse: {
+        requestSummary: redacted.value.requestSummary,
+        responseSummary: redacted.value.responseSummary,
+        redactionApplied: true
+      },
+      redactionApplied: true,
+      redactedFields: redacted.redactedFields,
+      safetyNotes: [
+        "Passive evidence ledger record only; Dure did not contact the target.",
+        "Program scope and rules override this record.",
+        "Use placeholders for credentials, tokens, personal data, and real user data."
+      ]
+    };
+    const evidencePath = path.join(preview.artifactPaths.runDir, "evidence-ledger.jsonl");
+
+    appendJsonLine(evidencePath, record);
+    appendJsonLine(preview.artifactPaths.decisionLog, {
+      type: "bug_bounty_evidence_recorded",
+      message: "Bug bounty evidence ledger entry was recorded with redaction policy applied.",
+      data: {
+        runId,
+        leadId: record.id,
+        status: record.status,
+        asset: record.asset,
+        endpoint: record.endpoint,
+        method: record.method,
+        confidence: record.confidence,
+        redactedFields: record.redactedFields,
+        nextAction: record.nextAction
+      },
+      timestamp: now.toISOString()
+    } satisfies DecisionLogEntry);
+    this.updateMetadata(preview, preview.metadata.status, now, { hasEvidenceLedger: true });
 
     return record;
   }
@@ -383,6 +452,7 @@ export class RunStore {
       hasWorkspaceVerification: existsSync(path.join(runDir, "workspace-verification.json")),
       hasApproval: existsSync(path.join(runDir, "approval.json")),
       hasScope: existsSync(path.join(runDir, "scope.json")),
+      hasEvidenceLedger: existsSync(path.join(runDir, "evidence-ledger.jsonl")),
       hasApply: existsSync(path.join(runDir, "apply.json")),
       hasRollback: existsSync(path.join(runDir, "rollback.json"))
     });
@@ -410,6 +480,9 @@ export class RunStore {
       : undefined;
     const bugBountyScope = artifactPaths.scope && existsSync(artifactPaths.scope)
       ? readJson<BugBountyScopeRecord>(artifactPaths.scope)
+      : undefined;
+    const bugBountyEvidenceLedger = artifactPaths.evidenceLedger && existsSync(artifactPaths.evidenceLedger)
+      ? readEvidenceLedger(artifactPaths.evidenceLedger)
       : undefined;
     const applyRecord = artifactPaths.apply && existsSync(artifactPaths.apply)
       ? readJson<ApplyRecord>(artifactPaths.apply)
@@ -443,6 +516,7 @@ export class RunStore {
       workspaceVerificationRecord,
       approvalRecord,
       bugBountyScope,
+      bugBountyEvidenceLedger,
       applyRecord,
       rollbackRecord,
       decisionLog,
@@ -537,6 +611,7 @@ export class RunStore {
     options: {
       readonly hasApproval?: boolean;
       readonly hasScope?: boolean;
+      readonly hasEvidenceLedger?: boolean;
       readonly hasApply?: boolean;
       readonly hasRollback?: boolean;
       readonly hasWorkspaceVerification?: boolean;
@@ -548,6 +623,7 @@ export class RunStore {
         options.hasWorkspaceVerification ?? preview.artifactPaths.workspaceVerification !== undefined,
       hasApproval: options.hasApproval ?? preview.artifactPaths.approval !== undefined,
       hasScope: options.hasScope ?? preview.artifactPaths.scope !== undefined,
+      hasEvidenceLedger: options.hasEvidenceLedger ?? preview.artifactPaths.evidenceLedger !== undefined,
       hasApply: "hasApply" in options ? options.hasApply : preview.artifactPaths.apply !== undefined,
       hasRollback: "hasRollback" in options ? options.hasRollback : preview.artifactPaths.rollback !== undefined
     });
@@ -571,6 +647,15 @@ export function createRunId(now = new Date()): string {
   return `run-${timestamp}-${randomBytes(3).toString("hex")}`;
 }
 
+export function createEvidenceLeadId(now = new Date()): string {
+  const timestamp = now
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}Z$/, "Z")
+    .replace("T", "-");
+  return `lead-${timestamp}-${randomBytes(3).toString("hex")}`;
+}
+
 export function isSafeRunId(runId: string): boolean {
   return /^run-\d{8}-\d{6}Z-[0-9a-f]{6}$/.test(runId);
 }
@@ -582,6 +667,7 @@ function createArtifactPaths(
     readonly hasWorkspaceVerification?: boolean;
     readonly hasApproval?: boolean;
     readonly hasScope?: boolean;
+    readonly hasEvidenceLedger?: boolean;
     readonly hasApply?: boolean;
     readonly hasRollback?: boolean;
   }
@@ -601,6 +687,7 @@ function createArtifactPaths(
       : undefined,
     approval: normalized.hasApproval ? path.join(runDir, "approval.json") : undefined,
     scope: normalized.hasScope ? path.join(runDir, "scope.json") : undefined,
+    evidenceLedger: normalized.hasEvidenceLedger ? path.join(runDir, "evidence-ledger.jsonl") : undefined,
     apply: normalized.hasApply ? path.join(runDir, "apply.json") : undefined,
     rollback: normalized.hasRollback ? path.join(runDir, "rollback.json") : undefined
   };
@@ -647,6 +734,30 @@ function readDecisionLog(filePath: string): DecisionLog {
     };
   } catch {
     throw new Error("Malformed run artifact: decision-log.jsonl.");
+  }
+}
+
+function readEvidenceLedger(filePath: string): BugBountyEvidenceLedger {
+  let source: string;
+  try {
+    source = readFileSync(filePath, "utf8").trim();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { entries: [] };
+    }
+    throw error;
+  }
+
+  if (source.length === 0) {
+    return { entries: [] };
+  }
+
+  try {
+    return {
+      entries: source.split("\n").map((line) => JSON.parse(line) as BugBountyEvidenceRecord)
+    };
+  } catch {
+    throw new Error("Malformed run artifact: evidence-ledger.jsonl.");
   }
 }
 
@@ -749,6 +860,99 @@ function createApplyTimestamp(now: Date): string {
 
 function sha256(value: Buffer): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+interface RedactedEvidence {
+  readonly value: BugBountyEvidenceInput;
+  readonly redactedFields: readonly string[];
+}
+
+interface RedactedText {
+  readonly value: string;
+  readonly redacted: boolean;
+}
+
+const EVIDENCE_REDACTION_PATTERNS: readonly {
+  readonly pattern: RegExp;
+  readonly replacement: string;
+}[] = [
+  { pattern: /\b(authorization|cookie|set-cookie)\s*:\s*[^\r\n]+/gi, replacement: "[redacted-secret]" },
+  {
+    pattern: /\b(api[_-]?key|secret|token|password|session|csrf)\s*[:=]\s*["']?[^"'\s,;]{6,}["']?/gi,
+    replacement: "[redacted-secret]"
+  },
+  { pattern: /\bbearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, replacement: "[redacted-secret]" },
+  { pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, replacement: "[redacted-email]" }
+];
+
+function normalizeEvidence(input: BugBountyEvidenceInput): BugBountyEvidenceInput {
+  return {
+    status: input.status,
+    asset: cleanRequiredString(input.asset, "Evidence asset is required."),
+    endpoint: cleanOptionalString(input.endpoint),
+    method: input.method,
+    authState: cleanOptionalString(input.authState),
+    userRole: cleanOptionalString(input.userRole),
+    objectOwnership: cleanOptionalString(input.objectOwnership),
+    hypothesis: cleanRequiredString(input.hypothesis, "Evidence hypothesis is required."),
+    testPerformed: cleanOptionalString(input.testPerformed),
+    requestSummary: cleanOptionalString(input.requestSummary),
+    responseSummary: cleanOptionalString(input.responseSummary),
+    evidence: cleanOptionalString(input.evidence),
+    impact: cleanRequiredString(input.impact, "Evidence impact is required."),
+    confidence: input.confidence,
+    scopeNote: cleanRequiredString(input.scopeNote, "Evidence scope note is required."),
+    programRuleNotes: cleanOptionalString(input.programRuleNotes),
+    nextAction: cleanRequiredString(input.nextAction, "Evidence next action is required.")
+  };
+}
+
+function redactEvidence(input: BugBountyEvidenceInput): RedactedEvidence {
+  const redactedFields: string[] = [];
+  const redact = (field: keyof BugBountyEvidenceInput, value: string | undefined): string | undefined => {
+    if (value === undefined) {
+      return undefined;
+    }
+    const redacted = redactEvidenceText(value);
+    if (redacted.redacted) {
+      redactedFields.push(field);
+    }
+    return redacted.value;
+  };
+
+  return {
+    value: {
+      status: input.status,
+      asset: redact("asset", input.asset) ?? input.asset,
+      endpoint: redact("endpoint", input.endpoint),
+      method: input.method,
+      authState: redact("authState", input.authState),
+      userRole: redact("userRole", input.userRole),
+      objectOwnership: redact("objectOwnership", input.objectOwnership),
+      hypothesis: redact("hypothesis", input.hypothesis) ?? input.hypothesis,
+      testPerformed: redact("testPerformed", input.testPerformed),
+      requestSummary: redact("requestSummary", input.requestSummary),
+      responseSummary: redact("responseSummary", input.responseSummary),
+      evidence: redact("evidence", input.evidence),
+      impact: redact("impact", input.impact) ?? input.impact,
+      confidence: input.confidence,
+      scopeNote: redact("scopeNote", input.scopeNote) ?? input.scopeNote,
+      programRuleNotes: redact("programRuleNotes", input.programRuleNotes),
+      nextAction: redact("nextAction", input.nextAction) ?? input.nextAction
+    },
+    redactedFields: [...new Set(redactedFields)]
+  };
+}
+
+function redactEvidenceText(value: string): RedactedText {
+  const redacted = EVIDENCE_REDACTION_PATTERNS.reduce((current, item) => {
+    item.pattern.lastIndex = 0;
+    return current.replace(item.pattern, item.replacement);
+  }, value);
+  return {
+    value: redacted,
+    redacted: redacted !== value
+  };
 }
 
 function normalizeScope(input: BugBountyScopeIntake): BugBountyScopeIntake {

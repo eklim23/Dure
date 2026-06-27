@@ -4,7 +4,13 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { AssistantRequestContext, SafetyDecision, TaskModeProposal, VerificationResult } from "@dure/core";
+import type {
+  AssistantRequestContext,
+  BugBountyEvidenceInput,
+  SafetyDecision,
+  TaskModeProposal,
+  VerificationResult
+} from "@dure/core";
 import { createRunId, DecisionLogRecorder, RunStore } from "../src/index";
 
 test("decision log records typed entries in order", () => {
@@ -447,6 +453,86 @@ test("run store records bug bounty scope intake", async () => {
   assert.equal(preview.decisionLog.entries.at(-1)?.type, "bug_bounty_scope_intake");
 });
 
+test("run store records bug bounty evidence ledger entries with redaction", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-evidence-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:38.000Z")
+  });
+
+  store.attachBugBountyScope(record.id, {
+    scope: sufficientScopeFixture(),
+    now: new Date("2026-06-27T00:00:39.000Z")
+  });
+  const evidence = store.recordBugBountyEvidence(record.id, {
+    evidence: evidenceFixture({
+      requestSummary: "GET /v1/orders/123 Authorization: Bearer supersecrettoken123",
+      responseSummary: "200 OK for victim@example.com",
+      evidence: "token=supersecrettoken123 shows up in copied notes"
+    }),
+    now: new Date("2026-06-27T00:00:40.000Z")
+  });
+  const preview = store.loadPreview(record.id);
+  const ledgerPath = preview.artifactPaths.evidenceLedger;
+
+  assert.match(evidence.id, /^lead-20260627-000040Z-[0-9a-f]{6}$/);
+  assert.equal(evidence.status, "testing");
+  assert.equal(evidence.redactionApplied, true);
+  assert.ok(evidence.redactedFields.includes("requestSummary"));
+  assert.ok(evidence.redactedFields.includes("responseSummary"));
+  assert.ok(evidence.redactedFields.includes("evidence"));
+  assert.equal(preview.bugBountyEvidenceLedger?.entries.length, 1);
+  assert.equal(preview.bugBountyEvidenceLedger?.entries[0].id, evidence.id);
+  assert.ok(ledgerPath);
+  assert.ok(existsSync(ledgerPath));
+  const ledgerSource = await readFile(ledgerPath, "utf8");
+  assert.match(ledgerSource, /\[redacted-secret\]/);
+  assert.match(ledgerSource, /\[redacted-email\]/);
+  assert.doesNotMatch(ledgerSource, /supersecrettoken123/);
+  assert.doesNotMatch(ledgerSource, /victim@example.com/);
+  assert.equal(preview.decisionLog.entries.at(-1)?.type, "bug_bounty_evidence_recorded");
+});
+
+test("run store blocks evidence recording without sufficient bug bounty scope", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-evidence-scope-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:41.000Z")
+  });
+
+  assert.throws(
+    () => store.recordBugBountyEvidence(record.id, { evidence: evidenceFixture() }),
+    /before bug bounty scope intake/
+  );
+
+  store.attachBugBountyScope(record.id, {
+    scope: minimalScopeFixture(),
+    now: new Date("2026-06-27T00:00:42.000Z")
+  });
+  assert.throws(
+    () => store.recordBugBountyEvidence(record.id, { evidence: evidenceFixture() }),
+    /only record blocked evidence/
+  );
+
+  const blocked = store.recordBugBountyEvidence(record.id, {
+    evidence: evidenceFixture({ status: "blocked", nextAction: "Clarify allowed techniques and rate limits." }),
+    now: new Date("2026-06-27T00:00:43.000Z")
+  });
+  assert.equal(blocked.status, "blocked");
+});
+
 test("run store rejects scope intake on non-bug-bounty runs", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-scope-reject-"));
   const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
@@ -463,6 +549,26 @@ test("run store rejects scope intake on non-bug-bounty runs", async () => {
 
   assert.throws(
     () => store.attachBugBountyScope(record.id, { scope: minimalScopeFixture() }),
+    /not a bug bounty proposal/
+  );
+});
+
+test("run store rejects evidence recording on non-bug-bounty runs", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-evidence-reject-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: patchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:44.000Z")
+  });
+
+  assert.throws(
+    () => store.recordBugBountyEvidence(record.id, { evidence: evidenceFixture() }),
     /not a bug bounty proposal/
   );
 });
@@ -764,6 +870,44 @@ function minimalScopeFixture() {
     testAccountRoles: [],
     dataHandlingRules: [],
     authorizationNote: ""
+  };
+}
+
+function sufficientScopeFixture() {
+  return {
+    target: "api.example.com",
+    inScopeAssets: ["api.example.com", "/v1/*"],
+    outOfScopeAssets: ["admin.example.com"],
+    allowedTechniques: ["read-only authorization checks"],
+    forbiddenTechniques: ["DoS", "brute force"],
+    rateLimits: ["10 requests per minute"],
+    testAccountRoles: ["user", "admin-test"],
+    dataHandlingRules: ["redact tokens and personal data"],
+    authorizationNote: "Program scope supplied by user.",
+    programRulesUrl: "https://example.com/program"
+  };
+}
+
+function evidenceFixture(overrides: Partial<BugBountyEvidenceInput> = {}): BugBountyEvidenceInput {
+  return {
+    status: "testing",
+    asset: "api.example.com",
+    endpoint: "/v1/orders/123",
+    method: "GET",
+    authState: "authenticated",
+    userRole: "user",
+    objectOwnership: "other-user object id placeholder",
+    hypothesis: "A user may be able to read another user's order detail by changing an object id.",
+    testPerformed: "Placeholder only; no live request was sent by Dure.",
+    requestSummary: "GET /v1/orders/{id} with user test account placeholder.",
+    responseSummary: "Expected 403 or redacted proof placeholder.",
+    evidence: "Evidence placeholder tied to role, timestamp, and scope.",
+    impact: "Potential cross-account order detail exposure if confirmed.",
+    confidence: "medium",
+    scopeNote: "api.example.com and /v1/* are in scope.",
+    programRuleNotes: "Read-only authorization checks are allowed.",
+    nextAction: "Confirm safely with owned test accounts and minimal requests.",
+    ...overrides
   };
 }
 

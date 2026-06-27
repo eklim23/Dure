@@ -296,6 +296,7 @@ export type DecisionLogEntryType =
   | "safety_decision"
   | "approval_decision"
   | "bug_bounty_scope_intake"
+  | "bug_bounty_evidence_recorded"
   | "patch_applied"
   | "workspace_verification_result"
   | "inferred_goal"
@@ -332,6 +333,7 @@ export interface RunArtifactPaths {
   readonly workspaceVerification?: string;
   readonly approval?: string;
   readonly scope?: string;
+  readonly evidenceLedger?: string;
   readonly apply?: string;
   readonly rollback?: string;
 }
@@ -368,6 +370,67 @@ export interface BugBountyScopeRecord extends BugBountyScopeIntake {
   readonly recordedBy: "user";
   readonly createdAt: string;
   readonly moochackerAssessment: MoochackerAssessment;
+}
+
+export type BugBountyEvidenceStatus =
+  | "hypothesis"
+  | "testing"
+  | "confirmed"
+  | "duplicate-risk"
+  | "non-issue"
+  | "blocked";
+
+export type BugBountyEvidenceConfidence = "low" | "medium" | "high";
+
+export type BugBountyHttpMethod =
+  | "GET"
+  | "POST"
+  | "PUT"
+  | "PATCH"
+  | "DELETE"
+  | "HEAD"
+  | "OPTIONS"
+  | "OTHER";
+
+export interface BugBountyRequestResponsePlaceholder {
+  readonly requestSummary?: string;
+  readonly responseSummary?: string;
+  readonly redactionApplied: true;
+}
+
+export interface BugBountyEvidenceInput {
+  readonly status: BugBountyEvidenceStatus;
+  readonly asset: string;
+  readonly endpoint?: string;
+  readonly method?: BugBountyHttpMethod;
+  readonly authState?: string;
+  readonly userRole?: string;
+  readonly objectOwnership?: string;
+  readonly hypothesis: string;
+  readonly testPerformed?: string;
+  readonly requestSummary?: string;
+  readonly responseSummary?: string;
+  readonly evidence?: string;
+  readonly impact: string;
+  readonly confidence: BugBountyEvidenceConfidence;
+  readonly scopeNote: string;
+  readonly programRuleNotes?: string;
+  readonly nextAction: string;
+}
+
+export interface BugBountyEvidenceRecord extends BugBountyEvidenceInput {
+  readonly id: string;
+  readonly runId: string;
+  readonly recordedBy: "user";
+  readonly createdAt: string;
+  readonly requestResponse: BugBountyRequestResponsePlaceholder;
+  readonly redactionApplied: true;
+  readonly redactedFields: readonly string[];
+  readonly safetyNotes: readonly string[];
+}
+
+export interface BugBountyEvidenceLedger {
+  readonly entries: readonly BugBountyEvidenceRecord[];
 }
 
 export interface AppliedPatchFile {
@@ -439,6 +502,7 @@ export interface RunPreview {
   readonly workspaceVerificationRecord?: WorkspaceVerificationRecord;
   readonly approvalRecord?: ApprovalRecord;
   readonly bugBountyScope?: BugBountyScopeRecord;
+  readonly bugBountyEvidenceLedger?: BugBountyEvidenceLedger;
   readonly applyRecord?: ApplyRecord;
   readonly rollbackRecord?: RollbackRecord;
   readonly decisionLog: DecisionLog;

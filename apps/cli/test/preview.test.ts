@@ -184,6 +184,99 @@ test("scope command records bug bounty scope intake", async () => {
   assert.match(result.stdout, /forbidden: DoS, brute force/);
 });
 
+test("evidence command records and lists bug bounty evidence leads", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-evidence-"));
+  const record = persistRun(tempRoot, bugBountyProposalFixture(), "bug_bounty");
+
+  assert.equal(runCli(tempRoot, [
+    "scope",
+    record.id,
+    "--target",
+    "api.example.com",
+    "--in-scope",
+    "api.example.com,/v1/*",
+    "--out-of-scope",
+    "admin.example.com",
+    "--allowed",
+    "read-only authorization checks",
+    "--forbidden",
+    "DoS,brute force",
+    "--rate-limit",
+    "10 requests per minute",
+    "--roles",
+    "user,admin-test",
+    "--data",
+    "redact tokens and personal data",
+    "--authorization-note",
+    "Program scope supplied by user"
+  ]).status, 0);
+
+  const recorded = runCli(tempRoot, [
+    "evidence",
+    record.id,
+    "--status",
+    "testing",
+    "--asset",
+    "api.example.com",
+    "--endpoint",
+    "/v1/orders/123",
+    "--method",
+    "GET",
+    "--role",
+    "user",
+    "--hypothesis",
+    "A user may be able to read another user's order detail.",
+    "--request",
+    "GET /v1/orders/123 Authorization: Bearer supersecrettoken123",
+    "--response",
+    "200 OK for victim@example.com",
+    "--impact",
+    "Potential cross-account order detail exposure.",
+    "--confidence",
+    "medium",
+    "--scope-note",
+    "api.example.com and /v1/* are in scope.",
+    "--next-action",
+    "Confirm with owned test accounts."
+  ]);
+  const listed = runCli(tempRoot, ["evidence", record.id]);
+  const ledgerPath = path.join(tempRoot, ".dure", "runs", record.id, "evidence-ledger.jsonl");
+
+  assert.equal(recorded.status, 0, recorded.stderr);
+  assert.match(recorded.stdout, /Dure Evidence/);
+  assert.match(recorded.stdout, /status: testing/);
+  assert.match(recorded.stdout, /confidence: medium/);
+  assert.match(recorded.stdout, /redacted fields: requestSummary, responseSummary/);
+  assert.equal(listed.status, 0, listed.stderr);
+  assert.match(listed.stdout, /Dure Evidence Ledger/);
+  assert.match(listed.stdout, /entries: 1/);
+  assert.match(await readFile(ledgerPath, "utf8"), /\[redacted-secret\]/);
+  assert.doesNotMatch(await readFile(ledgerPath, "utf8"), /supersecrettoken123/);
+});
+
+test("evidence command rejects development runs", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-evidence-dev-"));
+  const record = persistRun(tempRoot, patchProposalFixture(), "development");
+
+  const result = runCli(tempRoot, [
+    "evidence",
+    record.id,
+    "--asset",
+    "api.example.com",
+    "--hypothesis",
+    "Authorization boundary check.",
+    "--impact",
+    "Potential cross-account exposure.",
+    "--scope-note",
+    "In scope.",
+    "--next-action",
+    "Clarify scope."
+  ]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /not a bug bounty proposal/);
+});
+
 test("scope command rejects development runs", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-scope-dev-"));
   const record = persistRun(tempRoot, patchProposalFixture(), "development");

@@ -6,6 +6,11 @@ import type {
   ApplyRecord,
   ApprovalRecord,
   AssistantRunResult,
+  BugBountyEvidenceConfidence,
+  BugBountyEvidenceInput,
+  BugBountyEvidenceRecord,
+  BugBountyEvidenceStatus,
+  BugBountyHttpMethod,
   BugBountyScopeIntake,
   BugBountyScopeRecord,
   PatchProposal,
@@ -83,6 +88,22 @@ try {
     process.exit(verification.accepted ? 0 : 1);
   }
 
+  if (parsed.command === "evidence") {
+    if (!parsed.runId) {
+      throw new Error("evidence requires a run id.");
+    }
+    const store = new RunStore();
+    if (parsed.listEvidence) {
+      printEvidenceLedger(store.loadPreview(parsed.runId));
+    } else if (parsed.bugBountyEvidenceInput) {
+      const record = store.recordBugBountyEvidence(parsed.runId, { evidence: parsed.bugBountyEvidenceInput });
+      printEvidenceRecord(record);
+    } else {
+      throw new Error("evidence requires fields to record a lead, or no options to list the ledger.");
+    }
+    process.exit(0);
+  }
+
   if (!parsed.request) {
     printUsage();
     process.exit(args.length === 0 ? 0 : 1);
@@ -100,7 +121,7 @@ try {
 }
 
 interface ParsedArgs {
-  readonly command?: "run" | "ask" | "preview" | "approve" | "reject" | "scope" | "apply" | "verify";
+  readonly command?: "run" | "ask" | "preview" | "approve" | "reject" | "scope" | "apply" | "verify" | "evidence";
   readonly request?: string;
   readonly previewRunId?: string;
   readonly runId?: string;
@@ -109,6 +130,8 @@ interface ParsedArgs {
   readonly verificationScripts?: readonly WorkspaceVerificationScriptName[];
   readonly timeoutMs?: number;
   readonly scopeIntake?: BugBountyScopeIntake;
+  readonly bugBountyEvidenceInput?: BugBountyEvidenceInput;
+  readonly listEvidence?: boolean;
   readonly modeOverride?: TaskMode;
   readonly persist: boolean;
 }
@@ -167,6 +190,11 @@ function parseArgs(tokens: readonly string[]): ParsedArgs {
   if (commandOrRequest === "verify") {
     rejectRunCommandGlobalOptions("verify", modeOverride, persist);
     return parseVerifyCommand(rest, persist);
+  }
+
+  if (commandOrRequest === "evidence") {
+    rejectRunCommandGlobalOptions("evidence", modeOverride, persist);
+    return parseEvidenceCommand(rest, persist);
   }
 
   if (commandOrRequest === "run" || commandOrRequest === "ask") {
@@ -286,6 +314,62 @@ function parseVerifyCommand(tokens: readonly string[], persist: boolean): Parsed
   };
 }
 
+function parseEvidenceCommand(tokens: readonly string[], persist: boolean): ParsedArgs {
+  const [runId, ...rest] = tokens;
+  if (!runId || runId.trim().length === 0) {
+    throw new Error("evidence requires exactly one run id.");
+  }
+  if (rest.length === 0) {
+    return { command: "evidence", runId, listEvidence: true, persist };
+  }
+
+  const options = parseCommandOptions(rest, [
+    "status",
+    "asset",
+    "endpoint",
+    "method",
+    "auth-state",
+    "role",
+    "object-ownership",
+    "hypothesis",
+    "test",
+    "request",
+    "response",
+    "evidence",
+    "impact",
+    "confidence",
+    "scope-note",
+    "program-rule",
+    "next-action"
+  ]);
+  const evidence: BugBountyEvidenceInput = {
+    status: parseEvidenceStatus(firstOption(options, "status") ?? "hypothesis"),
+    asset: firstOption(options, "asset") ?? "",
+    endpoint: firstOption(options, "endpoint"),
+    method: firstOption(options, "method") ? parseHttpMethod(firstOption(options, "method") as string) : undefined,
+    authState: firstOption(options, "auth-state"),
+    userRole: firstOption(options, "role"),
+    objectOwnership: firstOption(options, "object-ownership"),
+    hypothesis: firstOption(options, "hypothesis") ?? "",
+    testPerformed: firstOption(options, "test"),
+    requestSummary: firstOption(options, "request"),
+    responseSummary: firstOption(options, "response"),
+    evidence: firstOption(options, "evidence"),
+    impact: firstOption(options, "impact") ?? "",
+    confidence: parseEvidenceConfidence(firstOption(options, "confidence") ?? "low"),
+    scopeNote: firstOption(options, "scope-note") ?? "",
+    programRuleNotes: firstOption(options, "program-rule"),
+    nextAction: firstOption(options, "next-action") ?? ""
+  };
+
+  return {
+    command: "evidence",
+    runId,
+    bugBountyEvidenceInput: evidence,
+    persist
+  };
+}
+
 function parseCommandOptions(tokens: readonly string[], allowed: readonly string[]): Map<string, string[]> {
   const options = new Map<string, string[]>();
   for (let index = 0; index < tokens.length; index += 1) {
@@ -337,6 +421,39 @@ function parseVerificationScript(value: string): WorkspaceVerificationScriptName
     return normalized;
   }
   throw new Error(`Unsupported verification script: ${value}. Allowed scripts: test, lint, typecheck.`);
+}
+
+function parseEvidenceStatus(value: string): BugBountyEvidenceStatus {
+  const normalized = value.trim().toLowerCase();
+  const allowed: readonly BugBountyEvidenceStatus[] = [
+    "hypothesis",
+    "testing",
+    "confirmed",
+    "duplicate-risk",
+    "non-issue",
+    "blocked"
+  ];
+  if (allowed.includes(normalized as BugBountyEvidenceStatus)) {
+    return normalized as BugBountyEvidenceStatus;
+  }
+  throw new Error(`Unsupported evidence status: ${value}.`);
+}
+
+function parseEvidenceConfidence(value: string): BugBountyEvidenceConfidence {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "low" || normalized === "medium" || normalized === "high") {
+    return normalized;
+  }
+  throw new Error(`Unsupported evidence confidence: ${value}.`);
+}
+
+function parseHttpMethod(value: string): BugBountyHttpMethod {
+  const normalized = value.trim().toUpperCase();
+  const allowed: readonly BugBountyHttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "OTHER"];
+  if (allowed.includes(normalized as BugBountyHttpMethod)) {
+    return normalized as BugBountyHttpMethod;
+  }
+  throw new Error(`Unsupported HTTP method: ${value}.`);
 }
 
 function readScopeFile(filePath: string): BugBountyScopeIntake {
@@ -439,6 +556,7 @@ function printUsage(): void {
   console.log('  dure apply <run-id> --workspace ".dure/workspaces/<run-id>"');
   console.log("  dure verify <run-id> --script test --timeout-ms 30000");
   console.log('  dure scope <run-id> --target "api.example.com" --in-scope "api.example.com" --forbidden "DoS,brute force"');
+  console.log('  dure evidence <run-id> --asset "api.example.com" --hypothesis "IDOR on order detail" --impact "Potential cross-account read" --scope-note "In scope" --next-action "Confirm with test accounts"');
 }
 
 function printResult(result: AssistantRunResult): void {
@@ -557,6 +675,54 @@ function printScope(record: BugBountyScopeRecord): void {
       ? record.moochackerAssessment.clarifyingQuestions
       : ["Scope intake is sufficient for passive planning."]
   );
+}
+
+function printEvidenceRecord(record: BugBountyEvidenceRecord): void {
+  console.log("Dure Evidence");
+  console.log("");
+  section("Run", [`id: ${record.runId}`, `lead: ${record.id}`]);
+  section("Lead", [
+    `status: ${record.status}`,
+    `confidence: ${record.confidence}`,
+    `asset: ${record.asset}`,
+    `endpoint: ${record.endpoint ?? "not recorded"}`,
+    `method: ${record.method ?? "not recorded"}`,
+    `role: ${record.userRole ?? "not recorded"}`
+  ]);
+  section("Hypothesis", [record.hypothesis]);
+  section("Impact", [record.impact]);
+  section("Scope", [record.scopeNote]);
+  section("Redaction", [
+    "applied: yes",
+    `redacted fields: ${formatList(record.redactedFields)}`
+  ]);
+  section("Next", [record.nextAction]);
+}
+
+function printEvidenceLedger(preview: RunPreview): void {
+  if (preview.proposal.kind !== "bug_bounty_review") {
+    throw new Error(`Run ${preview.metadata.id} is not a bug bounty proposal (${preview.proposal.kind}).`);
+  }
+
+  const entries = preview.bugBountyEvidenceLedger?.entries ?? [];
+  console.log("Dure Evidence Ledger");
+  console.log("");
+  section("Run", [
+    `id: ${preview.metadata.id}`,
+    `target: ${preview.bugBountyScope?.target ?? "scope not recorded"}`,
+    `entries: ${entries.length}`
+  ]);
+  section(
+    "Leads",
+    entries.length > 0
+      ? entries.map((entry) => `${entry.id}: ${entry.status}, ${entry.confidence}, ${entry.asset}${entry.endpoint ? ` ${entry.endpoint}` : ""}`)
+      : ["not recorded"]
+  );
+  section("Next", [
+    entries.length > 0
+      ? "Use evidence status and confidence to decide whether to draft a report or mark the lead as blocked/non-issue."
+      : "Record a scoped hypothesis before drafting a finding."
+  ]);
 }
 
 function printApply(record: ApplyRecord): void {

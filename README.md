@@ -117,6 +117,15 @@ corepack pnpm cli -- scope <run-id> --target "api.example.com" --in-scope "api.e
 
 Scope intake writes `.dure/runs/<run-id>/scope.json`, records MoochackerAgent's passive scope assessment, and never contacts the target.
 
+Record or list bug bounty evidence leads:
+
+```bash
+corepack pnpm cli -- evidence <run-id>
+corepack pnpm cli -- evidence <run-id> --status testing --asset "api.example.com" --endpoint "/v1/orders/{id}" --method GET --role "user" --hypothesis "Possible object-level authorization issue" --impact "Potential cross-account order detail exposure" --confidence medium --scope-note "api.example.com and /v1/* are in scope" --next-action "Confirm safely with owned test accounts"
+```
+
+Evidence entries are append-only records in `.dure/runs/<run-id>/evidence-ledger.jsonl`. Dure records lead id, hypothesis, status, request/response placeholders, impact, confidence, scope notes, and next action. It applies redaction before persistence and does not send HTTP requests, run scanners, access targets, or validate findings in v0.1.
+
 ## Example Output Shape
 
 ```text
@@ -182,6 +191,24 @@ Scope:
   - safety: caution
   - in scope: api.example.com, /v1/*
   - forbidden: DoS, brute force
+```
+
+Bug bounty evidence example:
+
+```text
+Dure Evidence
+
+Run:
+  - id: run-20260627-000003Z-abc123
+  - lead: lead-20260627-000004Z-def456
+
+Lead:
+  - status: testing
+  - confidence: medium
+  - asset: api.example.com
+
+Redaction:
+  - applied: yes
 ```
 
 Controlled apply example:
@@ -259,6 +286,7 @@ examples/                Future example projects
 - Agent reasoning is deterministic and rule-based.
 - Task mode routing is keyword/signal based.
 - MoochackerAgent produces structured bug bounty safety guidance only; active testing, target access, and external requests are not executed.
+- Bug bounty evidence records are user-supplied ledger entries; Dure does not prove, reproduce, or actively test findings in v0.1.
 - Approval records are durable gates for later controlled apply; approval itself does not modify files.
 - Controlled apply writes only approved patch content into a controlled workspace and records rollback metadata, but rollback execution is not implemented yet.
 - Proposal-time test, lint, and typecheck checks are placeholders.
