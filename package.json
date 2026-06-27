@@ -1,0 +1,23 @@
+{
+  "name": "aegisforge-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AegisForge is a secure personal AI assistant and multi-agent task orchestrator.",
+  "license": "MIT",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "build": "tsc -b --pretty false",
+    "typecheck": "tsc -b --pretty false",
+    "lint": "corepack pnpm run typecheck",
+    "test": "corepack pnpm run build && corepack pnpm -r --if-present test:run",
+    "cli": "node apps/cli/dist/src/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

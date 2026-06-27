@@ -1,0 +1,17 @@
+{
+  "name": "@aegisforge/verifier",
+  "version": "0.1.0",
+  "description": "Extensible verification gate for AegisForge patch proposals.",
+  "license": "MIT",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test:run": "node --test dist/test/*.test.js"
+  },
+  "dependencies": {
+    "@aegisforge/core": "workspace:*",
+    "@aegisforge/sandbox": "workspace:*"
+  }
+}

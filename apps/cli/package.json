@@ -1,0 +1,21 @@
+{
+  "name": "aegisforge",
+  "version": "0.1.0",
+  "description": "CLI for the AegisForge multi-agent development orchestrator.",
+  "license": "MIT",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "bin": {
+    "aegisforge": "dist/src/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/index.js"
+  },
+  "dependencies": {
+    "@aegisforge/assistant-core": "workspace:*",
+    "@aegisforge/core": "workspace:*",
+    "@aegisforge/orchestrator": "workspace:*"
+  }
+}

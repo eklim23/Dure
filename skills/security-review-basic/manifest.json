@@ -1,0 +1,11 @@
+{
+  "name": "security-review-basic",
+  "version": "0.1.0",
+  "summary": "Basic security review checklist for generated code.",
+  "tags": ["security", "review"],
+  "permissions": ["read_files"],
+  "estimatedSize": 10240,
+  "trusted": false,
+  "hash": "sha256:placeholder",
+  "signature": "unsigned"
+}

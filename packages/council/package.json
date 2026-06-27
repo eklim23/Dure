@@ -1,0 +1,16 @@
+{
+  "name": "@aegisforge/council",
+  "version": "0.1.0",
+  "description": "Deterministic structured mock agent council for AegisForge.",
+  "license": "MIT",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test:run": "node --test dist/test/*.test.js"
+  },
+  "dependencies": {
+    "@aegisforge/core": "workspace:*"
+  }
+}

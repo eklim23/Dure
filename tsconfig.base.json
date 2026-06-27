@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "types": ["node"],
+    "paths": {
+      "@aegisforge/core": ["packages/core/src/index.ts"],
+      "@aegisforge/council": ["packages/council/src/index.ts"],
+      "@aegisforge/builder-runtime": ["packages/builder-runtime/src/index.ts"],
+      "@aegisforge/verifier": ["packages/verifier/src/index.ts"],
+      "@aegisforge/skill-registry": ["packages/skill-registry/src/index.ts"],
+      "@aegisforge/sandbox": ["packages/sandbox/src/index.ts"],
+      "@aegisforge/memory": ["packages/memory/src/index.ts"],
+      "@aegisforge/orchestrator": ["packages/orchestrator/src/index.ts"],
+      "@aegisforge/intent-router": ["packages/intent-router/src/index.ts"],
+      "@aegisforge/task-modes": ["packages/task-modes/src/index.ts"],
+      "@aegisforge/assistant-core": ["packages/assistant-core/src/index.ts"]
+    }
+  }
+}
