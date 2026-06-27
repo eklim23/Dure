@@ -48,6 +48,30 @@ test("preview command rejects non-patch proposals for now", async () => {
   assert.match(result.stderr, /not a development patch proposal/);
 });
 
+test("runs, show, and export commands inspect persisted runs", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-runs-show-export-"));
+  const record = persistRun(tempRoot, bugBountyProposalFixture(), "bug_bounty");
+
+  const runs = runCli(tempRoot, ["runs", "--limit", "5"]);
+  const show = runCli(tempRoot, ["show", record.id]);
+  const exported = runCli(tempRoot, ["export", record.id]);
+  const exportPath = path.join(tempRoot, ".dure", "runs", record.id, "export.md");
+
+  assert.equal(runs.status, 0, runs.stderr);
+  assert.match(runs.stdout, /Dure Runs/);
+  assert.match(runs.stdout, new RegExp(record.id));
+  assert.match(runs.stdout, /bug_bounty/);
+  assert.equal(show.status, 0, show.stderr);
+  assert.match(show.stdout, /Dure Run/);
+  assert.match(show.stdout, /Proposal:/);
+  assert.match(show.stdout, /Artifacts:/);
+  assert.equal(exported.status, 0, exported.stderr);
+  assert.match(exported.stdout, /Dure Export/);
+  assert.match(exported.stdout, /export\.md/);
+  assert.ok(existsSync(exportPath));
+  assert.match(await readFile(exportPath, "utf8"), /## Decision Log/);
+});
+
 test("approve command records approval and updates preview status", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-approve-"));
   const record = persistRun(tempRoot, patchProposalFixture(), "development");

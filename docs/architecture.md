@@ -33,6 +33,9 @@ User Natural Language Input
    - `dure --mode bug-bounty "request"`
    - `dure ask "request"`
    - `dure run "request"`
+   - `dure runs`
+   - `dure show <run-id>`
+   - `dure export <run-id>`
    - `dure preview <run-id>`
    - `dure approve <run-id>`
    - `dure reject <run-id>`
@@ -96,7 +99,7 @@ User Natural Language Input
 
 12. Memory / Decision Log
 
-   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, approval decisions, controlled apply records, workspace verification records, bug bounty scope intake, bug bounty evidence ledger entries, bug bounty report drafts, and next recommended step.
+   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, approval decisions, controlled apply records, workspace verification records, bug bounty scope intake, bug bounty evidence ledger entries, bug bounty report drafts, redacted Markdown run exports, and next recommended step.
 
 ## MVP Ladder For Development Mode
 

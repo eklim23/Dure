@@ -31,6 +31,8 @@ import type {
   MoochackerAssessment,
   PatchChange,
   RunArtifactPaths,
+  RunExportRecord,
+  RunListItem,
   RunMetadata,
   RunPreview,
   RunRecord,
@@ -108,6 +110,14 @@ export interface VerifyRunInput {
   readonly now?: Date;
 }
 
+export interface ListRunsInput {
+  readonly limit?: number;
+}
+
+export interface ExportRunInput {
+  readonly now?: Date;
+}
+
 export class RunStore {
   readonly root: string;
 
@@ -154,6 +164,63 @@ export class RunStore {
     });
     writeFileSync(artifactPaths.decisionLog, "", { encoding: "utf8", flag: "a" });
     this.appendDecisionEntries(artifactPaths.decisionLog, input.decisionLog.entries);
+
+    return record;
+  }
+
+  listRuns(input: ListRunsInput = {}): readonly RunListItem[] {
+    if (!existsSync(this.root)) {
+      return [];
+    }
+
+    const limit = input.limit ?? 20;
+    if (!Number.isInteger(limit) || limit <= 0) {
+      throw new Error("Run list limit must be a positive integer.");
+    }
+
+    return readdirSync(this.root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && isSafeRunId(entry.name))
+      .map((entry) => readJson<RunMetadata>(path.join(this.root, entry.name, "metadata.json")))
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .slice(0, limit)
+      .map((metadata) => ({
+        id: metadata.id,
+        status: metadata.status,
+        selectedMode: metadata.selectedMode,
+        proposalKind: metadata.proposalKind,
+        proposalId: metadata.proposalId,
+        createdAt: metadata.createdAt,
+        updatedAt: metadata.updatedAt,
+        input: metadata.input,
+        requiresApproval: metadata.requiresApproval
+      }));
+  }
+
+  exportRun(runId: string, input: ExportRunInput = {}): RunExportRecord {
+    const now = input.now ?? new Date();
+    const preview = this.loadPreview(runId);
+    const outputPath = path.join(preview.artifactPaths.runDir, "export.md");
+    const record: RunExportRecord = {
+      runId,
+      format: "markdown",
+      outputPath,
+      createdAt: now.toISOString(),
+      summary: `Markdown audit export for ${preview.metadata.selectedMode} run ${runId}.`,
+      nextRecommendedAction: "Review the exported audit summary before sharing it outside the local workspace."
+    };
+
+    writeFileSync(outputPath, renderRunExportMarkdown(preview, record), "utf8");
+    appendJsonLine(preview.artifactPaths.decisionLog, {
+      type: "run_exported",
+      message: "Run audit summary was exported as Markdown.",
+      data: {
+        runId,
+        format: record.format,
+        outputPath: record.outputPath
+      },
+      timestamp: now.toISOString()
+    } satisfies DecisionLogEntry);
+    this.updateMetadata(preview, preview.metadata.status, now, { hasExport: true });
 
     return record;
   }
@@ -565,6 +632,7 @@ export class RunStore {
       hasScope: existsSync(path.join(runDir, "scope.json")),
       hasEvidenceLedger: existsSync(path.join(runDir, "evidence-ledger.jsonl")),
       hasReports: existsSync(path.join(runDir, "reports")),
+      hasExport: existsSync(path.join(runDir, "export.md")),
       hasApply: existsSync(path.join(runDir, "apply.json")),
       hasRollback: existsSync(path.join(runDir, "rollback.json"))
     });
@@ -729,6 +797,7 @@ export class RunStore {
       readonly hasScope?: boolean;
       readonly hasEvidenceLedger?: boolean;
       readonly hasReports?: boolean;
+      readonly hasExport?: boolean;
       readonly hasApply?: boolean;
       readonly hasRollback?: boolean;
       readonly hasWorkspaceVerification?: boolean;
@@ -742,6 +811,7 @@ export class RunStore {
       hasScope: options.hasScope ?? preview.artifactPaths.scope !== undefined,
       hasEvidenceLedger: options.hasEvidenceLedger ?? preview.artifactPaths.evidenceLedger !== undefined,
       hasReports: options.hasReports ?? preview.artifactPaths.reports !== undefined,
+      hasExport: options.hasExport ?? preview.artifactPaths.export !== undefined,
       hasApply: "hasApply" in options ? options.hasApply : preview.artifactPaths.apply !== undefined,
       hasRollback: "hasRollback" in options ? options.hasRollback : preview.artifactPaths.rollback !== undefined
     });
@@ -796,6 +866,7 @@ function createArtifactPaths(
     readonly hasScope?: boolean;
     readonly hasEvidenceLedger?: boolean;
     readonly hasReports?: boolean;
+    readonly hasExport?: boolean;
     readonly hasApply?: boolean;
     readonly hasRollback?: boolean;
   }
@@ -817,6 +888,7 @@ function createArtifactPaths(
     scope: normalized.hasScope ? path.join(runDir, "scope.json") : undefined,
     evidenceLedger: normalized.hasEvidenceLedger ? path.join(runDir, "evidence-ledger.jsonl") : undefined,
     reports: normalized.hasReports ? path.join(runDir, "reports") : undefined,
+    export: normalized.hasExport ? path.join(runDir, "export.md") : undefined,
     apply: normalized.hasApply ? path.join(runDir, "apply.json") : undefined,
     rollback: normalized.hasRollback ? path.join(runDir, "rollback.json") : undefined
   };
@@ -1249,6 +1321,132 @@ function markdownLine(value: string): string {
 
 function markdownParagraph(value: string): string {
   return markdownLine(value);
+}
+
+function renderRunExportMarkdown(preview: RunPreview, record: RunExportRecord): string {
+  const evidenceEntries = preview.bugBountyEvidenceLedger?.entries ?? [];
+  const reports = preview.bugBountyReportDrafts ?? [];
+  const policyViolations = preview.safetyDecision.policyEvaluation?.violations ?? [];
+
+  return [
+    `# Dure Run Export: ${preview.metadata.id}`,
+    "",
+    "## Export",
+    "",
+    `- Format: ${record.format}`,
+    `- Created at: ${record.createdAt}`,
+    `- Output path: ${markdownLine(record.outputPath)}`,
+    "",
+    "## Run",
+    "",
+    `- Status: ${preview.metadata.status}`,
+    `- Mode: ${preview.metadata.selectedMode}`,
+    `- Proposal: ${preview.metadata.proposalId} (${preview.metadata.proposalKind})`,
+    `- Created at: ${preview.metadata.createdAt}`,
+    `- Updated at: ${preview.metadata.updatedAt}`,
+    `- Requires approval: ${preview.metadata.requiresApproval ? "yes" : "no"}`,
+    "",
+    "## Request",
+    "",
+    markdownParagraph(redactedExportText(preview.request.originalInput)),
+    "",
+    "## Proposal",
+    "",
+    ...proposalExportLines(preview.proposal),
+    "",
+    "## Safety",
+    "",
+    `- Allowed: ${preview.safetyDecision.allowed ? "yes" : "no"}`,
+    `- Requires approval: ${preview.safetyDecision.requiresApproval ? "yes" : "no"}`,
+    `- Summary: ${markdownLine(preview.safetyDecision.summary)}`,
+    `- Blocked capabilities: ${exportList(preview.safetyDecision.blockedCapabilities)}`,
+    `- Policy violations: ${policyViolations.length}`,
+    ...policyViolations.map((violation) => `- ${violation.severity}: ${markdownLine(violation.message)}`),
+    "",
+    "## Verification",
+    "",
+    ...verificationExportLines(preview),
+    "",
+    "## Bug Bounty Artifacts",
+    "",
+    `- Scope: ${preview.bugBountyScope ? redactedExportText(preview.bugBountyScope.target) : "not recorded"}`,
+    `- Evidence leads: ${evidenceEntries.length}`,
+    ...evidenceEntries.map((entry) => `- ${entry.id}: ${entry.status}, ${entry.confidence}, ${redactedExportText(entry.asset)}${entry.endpoint ? ` ${redactedExportText(entry.endpoint)}` : ""}`),
+    `- Report drafts: ${reports.length}`,
+    ...reports.map((report) => `- ${report.id}: ${report.severity}, ${report.confidence}, ${redactedExportText(report.title)}`),
+    "",
+    "## Decision Log",
+    "",
+    ...preview.decisionLog.entries.map((entry) => `- ${entry.timestamp} ${entry.type}: ${markdownLine(entry.message)}`),
+    "",
+    "## Next",
+    "",
+    markdownParagraph(record.nextRecommendedAction),
+    ""
+  ].join("\n");
+}
+
+function proposalExportLines(proposal: TaskModeProposal): readonly string[] {
+  const base = [
+    `- Kind: ${proposal.kind}`,
+    `- Risk: ${proposal.riskLevel}`,
+    `- Requires approval: ${proposal.requiresApproval ? "yes" : "no"}`,
+    `- Summary: ${redactedExportText(proposal.summary)}`
+  ];
+
+  switch (proposal.kind) {
+    case "patch":
+      return [
+        ...base,
+        `- Stage: ${proposal.stage.id} - ${markdownLine(proposal.stage.name)}`,
+        `- Changes: ${proposal.changes.length}`,
+        ...proposal.changes.map((change) => `- ${change.operation}: ${markdownLine(change.path)} - ${redactedExportText(change.rationale)}`)
+      ];
+    case "bug_bounty_review":
+      return [
+        ...base,
+        `- Moochacker scope: ${proposal.moochackerAssessment.scopeStatus}`,
+        `- Moochacker safety: ${proposal.moochackerAssessment.safetyLevel}`,
+        `- Stop conditions: ${proposal.stopConditions.length}`
+      ];
+    case "document":
+      return [...base, `- Title: ${redactedExportText(proposal.title)}`];
+    case "security_review":
+      return [...base, `- Checklist items: ${proposal.checklist.length}`, `- Scan placeholders: ${exportList(proposal.scanPlaceholders)}`];
+    case "ops_plan":
+      return [...base, `- Status areas: ${exportList(proposal.statusAreas)}`];
+    case "productivity_plan":
+      return [...base, `- Tasks: ${proposal.tasks.length}`];
+    case "assistant_response":
+      return [...base, `- Response: ${redactedExportText(proposal.response)}`];
+  }
+}
+
+function verificationExportLines(preview: RunPreview): readonly string[] {
+  if (preview.workspaceVerificationRecord) {
+    return [
+      `- Workspace verification: ${preview.workspaceVerificationRecord.accepted ? "accepted" : "failed"}`,
+      `- Workspace status: ${preview.workspaceVerificationRecord.previousStatus} -> ${preview.workspaceVerificationRecord.nextStatus}`,
+      ...preview.workspaceVerificationRecord.commands.map((command) => `- ${command.name}: ${command.status}`)
+    ];
+  }
+
+  if (preview.verificationResult) {
+    return [
+      `- Proposal verification: ${preview.verificationResult.accepted ? "accepted" : "failed"}`,
+      ...preview.verificationResult.checks.map((check) => `- ${check.name}: ${check.passed ? "pass" : "fail"} (${check.mocked ? "mocked" : "local"})`)
+    ];
+  }
+
+  return ["- not recorded"];
+}
+
+function redactedExportText(value: string): string {
+  return markdownLine(redactEvidenceText(value).value);
+}
+
+function exportList(values: readonly string[]): string {
+  return values.length > 0 ? values.map(redactedExportText).join(", ") : "none";
 }
 
 function normalizeScope(input: BugBountyScopeIntake): BugBountyScopeIntake {

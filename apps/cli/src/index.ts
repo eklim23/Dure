@@ -17,6 +17,8 @@ import type {
   BugBountyScopeIntake,
   BugBountyScopeRecord,
   PatchProposal,
+  RunExportRecord,
+  RunListItem,
   RunPreview,
   SafetyDecision,
   TaskMode,
@@ -33,6 +35,30 @@ const args = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
 
 try {
   const parsed = parseArgs(args);
+
+  if (parsed.command === "runs") {
+    const runs = new RunStore().listRuns({ limit: parsed.limit });
+    printRuns(runs);
+    process.exit(0);
+  }
+
+  if (parsed.command === "show") {
+    if (!parsed.runId) {
+      throw new Error("show requires a run id.");
+    }
+    const preview = new RunStore().loadPreview(parsed.runId);
+    printRunShow(preview);
+    process.exit(0);
+  }
+
+  if (parsed.command === "export") {
+    if (!parsed.runId) {
+      throw new Error("export requires a run id.");
+    }
+    const record = new RunStore().exportRun(parsed.runId);
+    printRunExport(record);
+    process.exit(0);
+  }
 
   if (parsed.command === "preview") {
     if (!parsed.previewRunId) {
@@ -141,10 +167,24 @@ try {
 }
 
 interface ParsedArgs {
-  readonly command?: "run" | "ask" | "preview" | "approve" | "reject" | "scope" | "apply" | "verify" | "evidence" | "report";
+  readonly command?:
+    | "run"
+    | "ask"
+    | "runs"
+    | "show"
+    | "export"
+    | "preview"
+    | "approve"
+    | "reject"
+    | "scope"
+    | "apply"
+    | "verify"
+    | "evidence"
+    | "report";
   readonly request?: string;
   readonly previewRunId?: string;
   readonly runId?: string;
+  readonly limit?: number;
   readonly reason?: string;
   readonly workspaceRoot?: string;
   readonly verificationScripts?: readonly WorkspaceVerificationScriptName[];
@@ -194,6 +234,19 @@ function parseArgs(tokens: readonly string[]): ParsedArgs {
     return { command: "preview", previewRunId: rest[0], persist };
   }
 
+  if (commandOrRequest === "runs") {
+    rejectRunCommandGlobalOptions("runs", modeOverride, persist);
+    return parseRunsCommand(rest, persist);
+  }
+
+  if (commandOrRequest === "show" || commandOrRequest === "export") {
+    rejectRunCommandGlobalOptions(commandOrRequest, modeOverride, persist);
+    if (rest.length !== 1 || rest[0].trim().length === 0) {
+      throw new Error(`${commandOrRequest} requires exactly one run id.`);
+    }
+    return { command: commandOrRequest, runId: rest[0], persist };
+  }
+
   if (commandOrRequest === "approve" || commandOrRequest === "reject") {
     rejectRunCommandGlobalOptions(commandOrRequest, modeOverride, persist);
     return parseApprovalCommand(commandOrRequest, rest, persist);
@@ -240,6 +293,20 @@ function rejectRunCommandGlobalOptions(command: string, modeOverride: TaskMode |
   if (!persist) {
     throw new Error(`${command} is read-only or record-only and does not support --no-persist.`);
   }
+}
+
+function parseRunsCommand(tokens: readonly string[], persist: boolean): ParsedArgs {
+  const options = parseCommandOptions(tokens, ["limit"]);
+  const limitValue = firstOption(options, "limit");
+  let limit: number | undefined;
+  if (limitValue !== undefined) {
+    const parsedLimit = Number.parseInt(limitValue, 10);
+    if (!Number.isInteger(parsedLimit) || parsedLimit <= 0) {
+      throw new Error("--limit requires a positive integer value.");
+    }
+    limit = parsedLimit;
+  }
+  return { command: "runs", limit, persist };
 }
 
 function parseApprovalCommand(command: "approve" | "reject", tokens: readonly string[], persist: boolean): ParsedArgs {
@@ -641,6 +708,9 @@ function printUsage(): void {
   console.log('  dure --no-persist "Temporary dry conversation"');
   console.log('  dure ask "Draft a README for this project"');
   console.log('  dure run "Create a simple login-enabled bulletin board"');
+  console.log("  dure runs --limit 10");
+  console.log("  dure show <run-id>");
+  console.log("  dure export <run-id>");
   console.log("  dure preview <run-id>");
   console.log('  dure approve <run-id> --reason "Reviewed the patch proposal"');
   console.log('  dure reject <run-id> --reason "Scope is unclear"');
@@ -699,6 +769,50 @@ function summarizeSafetyDecision(decision: SafetyDecision): readonly string[] {
   ];
 }
 
+function printRuns(runs: readonly RunListItem[]): void {
+  console.log("Dure Runs");
+  console.log("");
+  section("Summary", [`runs: ${runs.length}`]);
+  section(
+    "Runs",
+    runs.length > 0
+      ? runs.map((run) => `${run.id}: ${run.status}, ${run.selectedMode}, ${run.proposalKind}, ${shortText(run.input, 72)}`)
+      : ["not recorded"]
+  );
+  section("Next", [runs.length > 0 ? "Use `dure show <run-id>` for full run context." : "Run a natural language request to create the first record."]);
+}
+
+function printRunShow(preview: RunPreview): void {
+  console.log("Dure Run");
+  console.log("");
+  section("Run", [
+    `id: ${preview.metadata.id}`,
+    `status: ${preview.metadata.status}`,
+    `mode: ${preview.metadata.selectedMode}`,
+    `proposal: ${preview.metadata.proposalId} (${preview.metadata.proposalKind})`,
+    `created: ${preview.metadata.createdAt}`,
+    `updated: ${preview.metadata.updatedAt}`
+  ]);
+  section("Request", [preview.request.originalInput]);
+  section("Proposal", summarizeProposal(preview.proposal));
+  section("Safety", summarizeSafetyDecision(preview.safetyDecision));
+  section("Artifacts", summarizeArtifacts(preview));
+  section("Decision Log", [
+    `entries: ${preview.decisionLog.entries.length}`,
+    ...(preview.decisionLog.entries.at(-1) ? [`latest: ${preview.decisionLog.entries.at(-1)?.type}`] : [])
+  ]);
+  section("Next", [preview.metadata.nextRecommendedAction]);
+}
+
+function printRunExport(record: RunExportRecord): void {
+  console.log("Dure Export");
+  console.log("");
+  section("Run", [`id: ${record.runId}`, `format: ${record.format}`]);
+  section("Artifact", [`path: ${record.outputPath}`]);
+  section("Summary", [record.summary]);
+  section("Next", [record.nextRecommendedAction]);
+}
+
 function printRunPreview(preview: RunPreview): void {
   if (preview.proposal.kind !== "patch") {
     throw new Error(`Run ${preview.metadata.id} is not a development patch proposal (${preview.proposal.kind}).`);
@@ -732,6 +846,23 @@ function printRunPreview(preview: RunPreview): void {
     section("Workspace Verification", summarizeWorkspaceVerification(preview.workspaceVerificationRecord));
   }
   section("Next", [preview.metadata.nextRecommendedAction]);
+}
+
+function summarizeArtifacts(preview: RunPreview): readonly string[] {
+  const lines = [
+    `run dir: ${preview.artifactPaths.runDir}`,
+    `decision log: ${preview.artifactPaths.decisionLog}`,
+    `scope: ${preview.bugBountyScope ? "recorded" : "not recorded"}`,
+    `evidence leads: ${preview.bugBountyEvidenceLedger?.entries.length ?? 0}`,
+    `report drafts: ${preview.bugBountyReportDrafts?.length ?? 0}`,
+    `approval: ${preview.approvalRecord ? preview.approvalRecord.decision : "not recorded"}`,
+    `apply: ${preview.applyRecord ? "recorded" : "not recorded"}`,
+    `workspace verification: ${preview.workspaceVerificationRecord ? preview.workspaceVerificationRecord.nextStatus : "not recorded"}`
+  ];
+  if (preview.artifactPaths.export) {
+    lines.push(`export: ${preview.artifactPaths.export}`);
+  }
+  return lines;
 }
 
 function printApproval(record: ApprovalRecord): void {
@@ -1009,4 +1140,12 @@ function summarizeCheckGroup(checks: readonly VerificationCheck[]): string {
 
 function formatList(values: readonly string[]): string {
   return values.length > 0 ? values.join(", ") : "none";
+}
+
+function shortText(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, Math.max(0, maxLength - 3))}...`;
 }

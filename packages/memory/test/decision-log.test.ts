@@ -103,6 +103,48 @@ test("run store loads a persisted development patch preview", async () => {
   assert.ok(preview.artifactPaths.runDir.endsWith(record.id));
 });
 
+test("run store lists runs and exports redacted markdown audit summaries", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-list-export-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const oldRecord = store.persistRun({
+    context: contextFixture(),
+    selectedAgentTeam: ["AssistantAgent"],
+    proposal: proposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review the structured proposal.",
+    now: new Date("2026-06-27T00:00:01.000Z")
+  });
+  const newRecord = store.persistRun({
+    context: {
+      ...contextFixture(),
+      originalInput: "Summarize Authorization: Bearer supersecrettoken123\nContact: test@example.com"
+    },
+    selectedAgentTeam: ["AssistantAgent"],
+    proposal: proposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review the structured proposal.",
+    now: new Date("2026-06-27T00:00:02.000Z")
+  });
+
+  const runs = store.listRuns({ limit: 1 });
+  const exported = store.exportRun(newRecord.id, { now: new Date("2026-06-27T00:00:03.000Z") });
+  const preview = store.loadPreview(newRecord.id);
+  const exportSource = await readFile(exported.outputPath, "utf8");
+
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].id, newRecord.id);
+  assert.notEqual(runs[0].id, oldRecord.id);
+  assert.ok(existsSync(exported.outputPath));
+  assert.equal(preview.artifactPaths.export, exported.outputPath);
+  assert.equal(preview.decisionLog.entries.at(-1)?.type, "run_exported");
+  assert.match(exportSource, /# Dure Run Export/);
+  assert.match(exportSource, /\[redacted-secret\]/);
+  assert.match(exportSource, /\[redacted-email\]/);
+  assert.doesNotMatch(exportSource, /supersecrettoken123/);
+});
+
 test("run store rejects unsafe and missing run ids", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-preview-missing-"));
   const store = new RunStore(path.join(tempRoot, ".dure", "runs"));

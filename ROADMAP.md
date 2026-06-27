@@ -21,12 +21,14 @@
 - Bug bounty evidence ledger persistence with redaction
 - Bug bounty report draft markdown export
 - Safety policy engine with mode capability allowlists and stop conditions
+- CLI run listing, mode-neutral show, and redacted Markdown export
 
 ## v0.2
 
 - Real LLM provider interface wiring
 - Project file indexing
-- Evidence ledger and report draft update/edit/export commands
+- Evidence ledger and report draft update/edit commands
+- Configurable export formats and destinations
 - Richer Development Mode project-state detection
 - Security checklist engine
 - Configurable policy defaults

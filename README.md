@@ -74,6 +74,16 @@ Backwards-compatible development-style command:
 corepack pnpm cli -- run "Create a simple login-enabled bulletin board"
 ```
 
+Inspect persisted runs:
+
+```bash
+corepack pnpm cli -- runs --limit 10
+corepack pnpm cli -- show <run-id>
+corepack pnpm cli -- export <run-id>
+```
+
+`runs` lists recent `.dure/runs` records, `show` prints a mode-neutral run summary, and `export` writes a redacted Markdown audit summary to `.dure/runs/<run-id>/export.md`.
+
 Preview a persisted development patch proposal:
 
 ```bash
@@ -305,7 +315,7 @@ packages/verifier        Verification gate interfaces and local scans
 packages/safety-policy   Mode capability policy and stop-condition engine
 packages/skill-registry  Previewable skill manifest registry
 packages/sandbox         Controlled path and workspace helpers
-packages/memory          Decision log recorder
+packages/memory          Decision log, run store, and Markdown run export
 docs/                    Architecture, threat model, council, skills
 skills/                  Example local skill manifests
 examples/                Future example projects
@@ -316,6 +326,7 @@ examples/                Future example projects
 - Agent reasoning is deterministic and rule-based.
 - Task mode routing is keyword/signal based.
 - Safety policy evaluation is deterministic and local; policy configuration is not user-editable yet.
+- Run export produces a local redacted Markdown summary; richer export formats are not implemented yet.
 - MoochackerAgent produces structured bug bounty safety guidance only; active testing, target access, and external requests are not executed.
 - Bug bounty evidence records are user-supplied ledger entries; Dure does not prove, reproduce, or actively test findings in v0.1.
 - Bug bounty report drafts are generated from stored evidence only; Dure does not validate findings, submit reports, or contact targets.

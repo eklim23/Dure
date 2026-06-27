@@ -357,6 +357,7 @@ export type DecisionLogEntryType =
   | "bug_bounty_scope_intake"
   | "bug_bounty_evidence_recorded"
   | "bug_bounty_report_drafted"
+  | "run_exported"
   | "patch_applied"
   | "workspace_verification_result"
   | "inferred_goal"
@@ -395,6 +396,7 @@ export interface RunArtifactPaths {
   readonly scope?: string;
   readonly evidenceLedger?: string;
   readonly reports?: string;
+  readonly export?: string;
   readonly apply?: string;
   readonly rollback?: string;
 }
@@ -588,6 +590,29 @@ export interface RunRecord {
 
 export interface RunMetadata extends RunRecord {
   readonly selectedAgentTeam: readonly AssistantAgentRole[];
+  readonly nextRecommendedAction: string;
+}
+
+export interface RunListItem {
+  readonly id: string;
+  readonly status: RunStatus;
+  readonly selectedMode: TaskMode;
+  readonly proposalKind: ProposalKind;
+  readonly proposalId: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly input: string;
+  readonly requiresApproval: boolean;
+}
+
+export type RunExportFormat = "markdown";
+
+export interface RunExportRecord {
+  readonly runId: string;
+  readonly format: RunExportFormat;
+  readonly outputPath: string;
+  readonly createdAt: string;
+  readonly summary: string;
   readonly nextRecommendedAction: string;
 }
 
