@@ -23,7 +23,9 @@ Dure is built around conservative agent control.
 
 ## Responsible Disclosure
 
-This project is new. Until a public security contact is configured, please open a private advisory or contact the maintainers through the repository owner.
+Please use a private GitHub security advisory for vulnerabilities or sensitive security reports:
+
+https://github.com/eklim23/Dure/security/advisories/new
 
 Do not include live secrets in public issues.
 
@@ -37,3 +39,7 @@ Please include:
 - actual behavior
 - impact
 - suggested mitigation if known
+
+## Bug Bounty Use
+
+Dure can help structure authorized bug bounty notes, scope, evidence ledgers, and draft reports. v0.1 must not be used to scan, attack, brute force, bypass rate limits, access out-of-scope systems, or submit unreviewed reports.

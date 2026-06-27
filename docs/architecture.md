@@ -2,6 +2,8 @@
 
 Dure v0.1 is assistant-first and mode-driven. The product direction has two primary modes: Development Mode and Bug Bounty Mode. The existing development orchestrator remains intact, but it now sits under a higher-level Assistant Core and Intent Router.
 
+See [architecture-diagram.md](./architecture-diagram.md) for a Mermaid overview of the package boundaries.
+
 ## Flow
 
 ```text

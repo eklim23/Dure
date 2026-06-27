@@ -1,0 +1,47 @@
+# Architecture Diagram
+
+```mermaid
+flowchart TD
+  User["User natural language request"] --> CLI["apps/cli"]
+  CLI --> AssistantCore["packages/assistant-core"]
+  AssistantCore --> IntentRouter["packages/intent-router"]
+  IntentRouter --> TaskModes["packages/task-modes"]
+
+  TaskModes --> Development["Development Mode"]
+  TaskModes --> BugBounty["Bug Bounty Mode"]
+  TaskModes --> Supporting["Supporting Modes"]
+
+  Development --> Orchestrator["packages/orchestrator"]
+  Orchestrator --> Council["packages/council"]
+  Orchestrator --> BuilderRuntime["packages/builder-runtime"]
+  BuilderRuntime --> Sandbox["packages/sandbox"]
+  Orchestrator --> Verifier["packages/verifier"]
+
+  BugBounty --> Moochacker["MoochackerAgent safety assessment"]
+  BugBounty --> Scope["Scope intake"]
+  BugBounty --> Evidence["Evidence ledger"]
+  BugBounty --> Report["Report draft"]
+
+  TaskModes --> SafetyPolicy["packages/safety-policy"]
+  SafetyPolicy --> SafetyDecision["SafetyDecision"]
+  Verifier --> SafetyDecision
+
+  AssistantCore --> Memory["packages/memory"]
+  Memory --> Runs[".dure/runs/<run-id>"]
+  Runs --> DecisionLog["decision-log.jsonl"]
+  Runs --> Export["export.md"]
+
+  SkillRegistry["packages/skill-registry"] --> AssistantCore
+```
+
+## Boundaries
+
+- `apps/cli` is the only user-facing app in v0.1.
+- `packages/core` owns shared types.
+- `packages/assistant-core` coordinates routing, mode execution, safety decision persistence, and run records.
+- `packages/task-modes` produces deterministic proposals.
+- `packages/safety-policy` decides whether capabilities are allowed, warning-only, or blocked.
+- `packages/memory` persists run artifacts and redacted Markdown exports.
+- `packages/verifier` performs proposal-time and approved-workspace verification.
+
+No package may add uncontrolled shell execution, live bug bounty testing, or external integrations without an explicit approval layer.

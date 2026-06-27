@@ -4,6 +4,22 @@
   "private": true,
   "description": "Dure is a secure personal AI assistant and multi-agent task orchestrator.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eklim23/Dure.git"
+  },
+  "bugs": {
+    "url": "https://github.com/eklim23/Dure/issues"
+  },
+  "homepage": "https://github.com/eklim23/Dure#readme",
+  "keywords": [
+    "assistant",
+    "multi-agent",
+    "orchestrator",
+    "cli",
+    "security",
+    "bug-bounty"
+  ],
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=22.0.0",

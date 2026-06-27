@@ -1,5 +1,7 @@
 # Dure
 
+[![CI](https://github.com/eklim23/Dure/actions/workflows/ci.yml/badge.svg)](https://github.com/eklim23/Dure/actions/workflows/ci.yml)
+
 Dure is a secure personal AI assistant and multi-agent task orchestrator focused on two primary workflows: development and authorized bug bounty work.
 
 It understands natural language requests, infers the user's intent, selects the appropriate task mode, forms a role-based agent team when useful, executes only controlled actions, and records decisions for auditability.
@@ -41,8 +43,14 @@ Other assistant capabilities can exist as supporting utilities, but they should 
 
 ## Install
 
+Requirements:
+
+- Node.js 22+
+- pnpm 9+ through Corepack
+
 ```bash
 cd C:\Users\eklim\EKLIM\Works\Dure
+corepack enable
 corepack pnpm install
 corepack pnpm build
 ```
@@ -321,6 +329,20 @@ skills/                  Example local skill manifests
 examples/                Future example projects
 ```
 
+## Project Docs
+
+- [Architecture](./docs/architecture.md)
+- [Architecture diagram](./docs/architecture-diagram.md)
+- [Threat model](./docs/threat-model.md)
+- [Agent council](./docs/agent-council.md)
+- [Skill format](./docs/skill-format.md)
+- [Demo transcript](./docs/demo-transcript.md)
+- [Release checklist](./docs/release-checklist.md)
+- [Roadmap](./ROADMAP.md)
+- [Security](./SECURITY.md)
+- [Contributing](./CONTRIBUTING.md)
+- [Code of conduct](./CODE_OF_CONDUCT.md)
+
 ## What Is Mocked In v0.1
 
 - Agent reasoning is deterministic and rule-based.
@@ -343,3 +365,7 @@ examples/                Future example projects
 ## Next
 
 See [ROADMAP.md](./ROADMAP.md) for v0.2 and later priorities.
+
+## License
+
+Dure is released under the [MIT License](./LICENSE).

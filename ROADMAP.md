@@ -22,6 +22,7 @@
 - Bug bounty report draft markdown export
 - Safety policy engine with mode capability allowlists and stop conditions
 - CLI run listing, mode-neutral show, and redacted Markdown export
+- Open-source baseline: CI, issue/PR templates, license, demo transcript, release checklist, and architecture diagram
 
 ## v0.2
 
@@ -33,6 +34,7 @@
 - Security checklist engine
 - Configurable policy defaults
 - Verification UX polish and richer summaries
+- First read-only Dure Console prototype for run inspection and agent activity visualization
 
 ## v0.3
 

@@ -1,0 +1,38 @@
+name: Feature request
+description: Suggest a focused improvement for Dure.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the smallest useful version of the feature.
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Area
+      options:
+        - Development Mode
+        - Bug Bounty Mode
+        - Safety Policy
+        - Memory / Decision Log
+        - CLI UX
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and auditability notes
+      description: Does this affect approvals, external tools, run artifacts, secrets, or bug bounty scope?

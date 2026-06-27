@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/eklim23/Dure/security/advisories/new
+    about: Please use a private advisory for vulnerabilities or sensitive security reports.
