@@ -30,6 +30,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/orchestrator
 
+  apps/ui: {}
+
   packages/assistant-core:
     dependencies:
       '@dure/core':

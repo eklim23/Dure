@@ -47,15 +47,19 @@ User Natural Language Input
    - `dure evidence <run-id>`
    - `dure report <run-id>`
 
-2. Assistant Core
+2. UI Prototype
+
+   `apps/ui` is a static, read-only Stage 16 prototype for the future Dure Console. It visualizes clickable agents, curated council discussion, Development Mode green lighting, and Bug Bounty / Security Mode red lighting. It has no backend, no persistence, no run-record reads, no external network calls, no target access, and no patch approval/apply/verification controls.
+
+3. Assistant Core
 
    `packages/assistant-core` creates `AssistantRequestContext`, records assistant-level decisions, executes the selected task mode, and returns a unified result.
 
-3. Intent Router
+4. Intent Router
 
    `packages/intent-router` classifies requests into task modes using deterministic v0.1 routing. It returns confidence, assumptions, capabilities, safety requirements, rejected modes, and whether approval or external tools are required.
 
-4. Task Modes
+5. Task Modes
 
    `packages/task-modes` owns mode-specific deterministic behavior:
 
@@ -67,7 +71,7 @@ User Natural Language Input
    - Personal Productivity Mode returns a `ProductivityPlanProposal`.
    - Assistant Mode returns an `AssistantResponseProposal`.
 
-5. Primary Modes
+6. Primary Modes
 
    Development Mode and Bug Bounty Mode are the primary product surface.
 
@@ -75,31 +79,31 @@ User Natural Language Input
 
    Bug Bounty Mode is for authorized web security review planning. In v0.1 it creates only passive scope, target-map, hypothesis, evidence-ledger, and report scaffolds. It does not access targets or run active tests.
 
-6. Development Orchestrator
+7. Development Orchestrator
 
    `packages/orchestrator` is reused by Development Mode. It keeps the previous design: `GoalState`, Agent Council, MVP Ladder, Single Writer / Multi Reviewer, `PatchProposal`, verification, and development decision logging.
 
-7. Agent Councils
+8. Agent Councils
 
    `packages/council` contains deterministic mock development reviewers. Other task modes select lightweight role teams in `packages/task-modes` for v0.1.
 
-8. Controlled Execution
+9. Controlled Execution
 
    Development patches are proposals, not automatic edits. `approve` and `reject` create durable approval decisions under `.dure/runs/<run-id>/approval.json`; they do not apply files or execute commands. `apply` requires an approved patch run and writes create/modify operations only into a controlled workspace, recording `apply.json`, `rollback.json`, backups, and a decision-log event. `verify` then runs only allow-listed package scripts from the applied workspace and records `workspace-verification.json`. Bug Bounty Mode produces scope records, evidence ledger entries, and report drafts only from user-supplied data until explicit authorization and rules of engagement are known.
 
-9. Verification / Safety Gate
+10. Verification / Safety Gate
 
    `packages/verifier` handles proposal-time patch verification and applied-workspace verification. Proposal-time test, lint, typecheck, and dependency audit checks remain conservative placeholders. Applied-workspace verification may run only `test`, `lint`, and `typecheck` scripts from `package.json`, blocks pre/post lifecycle hooks in v0.1, captures redacted output, and updates the run to `verified` or `failed`.
 
-10. Safety Policy
+11. Safety Policy
 
    `packages/safety-policy` owns the deterministic v0.1 policy engine. It defines the capability registry, mode-specific allowed capabilities, default external-tool blocking, bug bounty active-testing stop conditions, shared secret redaction rules, and structured policy violation results. Policy evaluation is attached to `SafetyDecision` and persisted in run artifacts.
 
-11. Skill Registry
+12. Skill Registry
 
    `packages/skill-registry` previews manifests and refuses to load untrusted skills without explicit approval.
 
-12. Memory / Decision Log
+13. Memory / Decision Log
 
    `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, approval decisions, controlled apply records, workspace verification records, bug bounty scope intake, bug bounty evidence ledger entries, bug bounty report drafts, redacted Markdown run exports, and next recommended step.
 

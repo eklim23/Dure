@@ -3,6 +3,8 @@
 ```mermaid
 flowchart TD
   User["User natural language request"] --> CLI["apps/cli"]
+  User --> UI["apps/ui static Dure Console prototype"]
+  UI --> UIState["Local mock agent activity only"]
   CLI --> AssistantCore["packages/assistant-core"]
   AssistantCore --> IntentRouter["packages/intent-router"]
   IntentRouter --> TaskModes["packages/task-modes"]
@@ -37,6 +39,7 @@ flowchart TD
 ## Boundaries
 
 - `apps/cli` is the only user-facing app in v0.1.
+- `apps/ui` is a read-only static prototype; it does not execute, persist, scan, approve, apply, verify, or call a backend.
 - `packages/core` owns shared types.
 - `packages/assistant-core` coordinates routing, mode execution, safety decision persistence, and run records.
 - `packages/task-modes` produces deterministic proposals.

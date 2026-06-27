@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dure Console Prototype</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <main id="app" class="shell" data-mode="development">
+      <header class="topbar" aria-label="Dure console header">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true">D</span>
+          <div>
+            <p class="eyebrow">Stage 16 UI Prototype</p>
+            <h1>Dure Console</h1>
+          </div>
+        </div>
+        <section class="mode-switcher" aria-label="Mode selector">
+          <button class="mode-button active" type="button" data-mode-choice="development" aria-pressed="true">
+            <span class="mode-light" aria-hidden="true"></span>
+            Development
+          </button>
+          <button class="mode-button" type="button" data-mode-choice="bug-bounty" aria-pressed="false">
+            <span class="mode-light" aria-hidden="true"></span>
+            Bug Bounty / Security
+          </button>
+        </section>
+      </header>
+
+      <section class="status-strip" aria-label="Current prototype state">
+        <div>
+          <span class="strip-label">Mode</span>
+          <strong id="mode-title">Development Mode</strong>
+        </div>
+        <div>
+          <span class="strip-label">Stage</span>
+          <strong id="stage-title">UI Prototype</strong>
+        </div>
+        <div>
+          <span class="strip-label">Safety</span>
+          <strong>Read-only simulation</strong>
+        </div>
+        <div>
+          <span class="strip-label">PM Gate</span>
+          <strong>Approved for static preview</strong>
+        </div>
+      </section>
+
+      <div class="workspace">
+        <aside class="agent-roster" aria-label="Agent roster">
+          <div class="panel-heading">
+            <p class="eyebrow">Agent Field</p>
+            <h2>Working Dots</h2>
+          </div>
+          <div id="agent-list" class="agent-list" role="listbox" aria-label="Select an agent"></div>
+        </aside>
+
+        <section class="board-column" aria-label="Agent activity board">
+          <div class="council-board" id="agent-field">
+            <div class="field-grid" aria-hidden="true"></div>
+            <div class="field-orbit orbit-one" aria-hidden="true"></div>
+            <div class="field-orbit orbit-two" aria-hidden="true"></div>
+            <div class="dure-core" aria-label="Dure coordination core">
+              <span>Dure</span>
+              <small id="core-mode">Development Mode</small>
+            </div>
+            <div class="lane-label lane-left">Design Council</div>
+            <div class="lane-label lane-right">Review Gate</div>
+            <div id="agent-nodes" class="agent-nodes"></div>
+          </div>
+
+          <section class="conversation-panel" aria-label="Curated agent discussion">
+            <div class="conversation-header">
+              <div>
+                <p class="eyebrow">Visible Discussion</p>
+                <h2 id="conversation-title">PM approval and UI council notes</h2>
+              </div>
+              <span class="simulation-pill">simulated transcript</span>
+            </div>
+            <div id="conversation-list" class="conversation-list"></div>
+          </section>
+        </section>
+
+        <aside class="inspector" aria-label="Selected agent details">
+          <div class="panel-heading">
+            <p class="eyebrow">Inspector</p>
+            <h2 id="agent-name">PMAgent</h2>
+          </div>
+          <dl class="agent-meta">
+            <div>
+              <dt>Role</dt>
+              <dd id="agent-role">Product manager</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd id="agent-status">Approving prototype scope</dd>
+            </div>
+            <div>
+              <dt>Focus</dt>
+              <dd id="agent-focus">Keep the UI static, safe, and useful.</dd>
+            </div>
+          </dl>
+
+          <section class="inspector-section">
+            <h3>Current Assignment</h3>
+            <p id="agent-assignment"></p>
+          </section>
+
+          <section class="inspector-section">
+            <h3>Position</h3>
+            <p id="agent-stance"></p>
+          </section>
+
+          <section class="inspector-section">
+            <h3>Needs</h3>
+            <ul id="agent-needs" class="clean-list"></ul>
+          </section>
+
+          <section class="inspector-section">
+            <h3>Guardrails</h3>
+            <ul id="agent-risks" class="clean-list"></ul>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </body>
+</html>

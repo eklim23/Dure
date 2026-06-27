@@ -25,6 +25,7 @@ Other assistant capabilities can exist as supporting utilities, but they should 
 - Verification and safety policy gates
 - Decision log / memory
 - Skill registry stub
+- Read-only Dure Console static UI prototype
 - No external API keys required
 - No real email, calendar, server, shell, cloud, or network integrations
 
@@ -152,6 +153,18 @@ corepack pnpm cli -- report <run-id> --lead <lead-id> --severity medium --title 
 ```
 
 Report drafts are generated from existing evidence ledger entries only. Dure writes `.dure/runs/<run-id>/reports/<report-id>.json` and `.md`, calibrates severity conservatively, blocks high or critical severity for unconfirmed leads, and does not validate, reproduce, submit, or disclose findings in v0.1.
+
+## UI Prototype
+
+Dure also includes a static, read-only console prototype:
+
+```text
+apps/ui/index.html
+```
+
+Open that file directly in a browser to preview the Stage 16 UI concept. It shows clickable agent dots, curated council discussion, green Development Mode lighting, and red Bug Bounty / Security Mode lighting.
+
+The prototype is intentionally local-only. It does not call a backend, store run records, execute tools, scan targets, approve patches, apply files, or verify workspaces.
 
 ## Example Output Shape
 

@@ -1,0 +1,10 @@
+{
+  "name": "@dure/ui",
+  "version": "0.1.0",
+  "description": "Static read-only Dure Console UI prototype.",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test:run": "node --test test/*.test.mjs"
+  }
+}
