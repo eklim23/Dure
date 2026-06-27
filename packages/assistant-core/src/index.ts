@@ -1,6 +1,6 @@
 import type { AssistantRequestContext, AssistantRunResult, TaskMode } from "@dure/core";
 import { IntentRouter } from "@dure/intent-router";
-import { DecisionLogRecorder } from "@dure/memory";
+import { DecisionLogRecorder, RunStore } from "@dure/memory";
 import { TaskModeRunner } from "@dure/task-modes";
 
 export class AssistantCore {
@@ -58,7 +58,7 @@ export class AssistantCore {
       nextRecommendedAction: modeResult.nextRecommendedAction
     });
 
-    return {
+    const result: AssistantRunResult = {
       context,
       selectedAgentTeam: modeResult.selectedAgentTeam,
       proposal: modeResult.proposal,
@@ -68,9 +68,34 @@ export class AssistantCore {
       decisionLog: log.toDecisionLog(),
       nextRecommendedAction: modeResult.nextRecommendedAction
     };
+
+    if (options.persist === true) {
+      const store = new RunStore(options.runStoreRoot);
+      const runRecord = store.persistRun({
+        context: result.context,
+        selectedAgentTeam: result.selectedAgentTeam,
+        proposal: result.proposal,
+        safetyDecision: result.safetyDecision,
+        verificationResult: result.verificationResult,
+        decisionLog: result.decisionLog,
+        nextRecommendedAction: result.nextRecommendedAction,
+        now
+      });
+
+      return {
+        ...result,
+        runId: runRecord.id,
+        runRecord,
+        runArtifactPaths: runRecord.artifactPaths
+      };
+    }
+
+    return result;
   }
 }
 
 export interface AssistantRunOptions {
   readonly modeOverride?: TaskMode;
+  readonly persist?: boolean;
+  readonly runStoreRoot?: string;
 }

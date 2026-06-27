@@ -255,6 +255,33 @@ export interface DecisionLog {
   readonly entries: readonly DecisionLogEntry[];
 }
 
+export type RunStatus = "proposed" | "approved" | "rejected" | "applied" | "verified" | "failed";
+
+export interface RunArtifactPaths {
+  readonly runDir: string;
+  readonly request: string;
+  readonly context: string;
+  readonly proposal: string;
+  readonly safety: string;
+  readonly decisionLog: string;
+  readonly metadata: string;
+  readonly verification?: string;
+}
+
+export interface RunRecord {
+  readonly id: string;
+  readonly status: RunStatus;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly input: string;
+  readonly selectedMode: TaskMode;
+  readonly confidenceScore: number;
+  readonly proposalKind: ProposalKind;
+  readonly proposalId: string;
+  readonly requiresApproval: boolean;
+  readonly artifactPaths: RunArtifactPaths;
+}
+
 export interface SkillManifest {
   readonly name: string;
   readonly version: string;
@@ -352,6 +379,9 @@ export interface AssistantRunResult {
   readonly verificationResult?: VerificationResult;
   readonly developmentResult?: OrchestrationResult;
   readonly decisionLog: DecisionLog;
+  readonly runId?: string;
+  readonly runRecord?: RunRecord;
+  readonly runArtifactPaths?: RunArtifactPaths;
   readonly nextRecommendedAction: string;
 }
 

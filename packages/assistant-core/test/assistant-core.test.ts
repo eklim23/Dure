@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { AssistantCore } from "../src/index";
 
@@ -49,4 +53,33 @@ test("assistant core records assistant-level decisions", () => {
       "next_recommended_step"
     ]
   );
+});
+
+test("assistant core can persist a run record", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "dure-assistant-runs-"));
+  const result = new AssistantCore().run("Draft a README for this project", new Date("2026-06-27T00:00:00.000Z"), {
+    persist: true,
+    runStoreRoot: path.join(root, ".dure", "runs")
+  });
+
+  assert.ok(result.runId);
+  assert.ok(result.runRecord);
+  assert.ok(result.runArtifactPaths);
+  assert.equal(result.runRecord.status, "proposed");
+  assert.equal(result.runRecord.selectedMode, "documentation");
+  assert.ok(existsSync(result.runArtifactPaths.metadata));
+  assert.ok(existsSync(result.runArtifactPaths.decisionLog));
+});
+
+test("assistant core does not persist when persist is false", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "dure-assistant-no-runs-"));
+  const runStoreRoot = path.join(root, ".dure", "runs");
+  const result = new AssistantCore().run("Draft a README for this project", new Date("2026-06-27T00:00:00.000Z"), {
+    persist: false,
+    runStoreRoot
+  });
+
+  assert.equal(result.runId, undefined);
+  assert.equal(result.runRecord, undefined);
+  assert.equal(existsSync(runStoreRoot), false);
 });

@@ -17,21 +17,35 @@ if (!parsed.request) {
   process.exit(args.length === 0 ? 0 : 1);
 }
 
-const assistant = new AssistantCore();
-const result = assistant.run(parsed.request, new Date(), { modeOverride: parsed.modeOverride });
-printResult(result);
+try {
+  const assistant = new AssistantCore();
+  const result = assistant.run(parsed.request, new Date(), {
+    modeOverride: parsed.modeOverride,
+    persist: parsed.persist
+  });
+  printResult(result);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 
 interface ParsedArgs {
   readonly request?: string;
   readonly modeOverride?: TaskMode;
+  readonly persist: boolean;
 }
 
 function parseArgs(tokens: readonly string[]): ParsedArgs {
   const remaining: string[] = [];
   let modeOverride: TaskMode | undefined;
+  let persist = true;
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
+    if (token === "--no-persist") {
+      persist = false;
+      continue;
+    }
     if (token === "--mode") {
       const value = tokens[index + 1];
       if (!value) {
@@ -46,16 +60,16 @@ function parseArgs(tokens: readonly string[]): ParsedArgs {
 
   const [commandOrRequest, ...rest] = remaining;
   if (commandOrRequest === undefined) {
-    return { modeOverride };
+    return { modeOverride, persist };
   }
 
   if (commandOrRequest === "run" || commandOrRequest === "ask") {
     const request = rest.join(" ").trim();
-    return { request: request.length > 0 ? request : undefined, modeOverride };
+    return { request: request.length > 0 ? request : undefined, modeOverride, persist };
   }
 
   const request = [commandOrRequest, ...rest].join(" ").trim();
-  return { request: request.length > 0 ? request : undefined, modeOverride };
+  return { request: request.length > 0 ? request : undefined, modeOverride, persist };
 }
 
 function parseMode(value: string): TaskMode {
@@ -87,6 +101,7 @@ function printUsage(): void {
   console.log("Usage:");
   console.log('  dure "Create a simple login-enabled bulletin board"');
   console.log('  dure --mode bug-bounty "Map scope for an authorized web target"');
+  console.log('  dure --no-persist "Temporary dry conversation"');
   console.log('  dure ask "Draft a README for this project"');
   console.log('  dure run "Create a simple login-enabled bulletin board"');
 }
@@ -95,6 +110,13 @@ function printResult(result: AssistantRunResult): void {
   console.log("Dure v0.1");
   console.log("");
   section("Original Request", [result.context.originalInput]);
+  if (result.runRecord) {
+    section("Run Record", [
+      `id: ${result.runRecord.id}`,
+      `status: ${result.runRecord.status}`,
+      `path: ${result.runRecord.artifactPaths.runDir}`
+    ]);
+  }
   section("Selected Mode", [
     result.context.selectedMode,
     `confidence: ${result.context.confidenceScore.toFixed(2)}`,
