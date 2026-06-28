@@ -110,13 +110,26 @@ test("approve command records approval and updates preview status", async () => 
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-approve-"));
   const record = persistRun(tempRoot, patchProposalFixture(), "development");
 
-  const approval = runCli(tempRoot, ["approve", record.id, "--reason", "Reviewed preview output"]);
+  const missingConfirmation = runCli(tempRoot, ["approve", record.id, "--reason", "Reviewed preview output"]);
+  const approval = runCli(tempRoot, [
+    "approve",
+    record.id,
+    "--confirm-risk",
+    "medium",
+    "--reason",
+    "Reviewed preview output"
+  ]);
   const preview = runCli(tempRoot, ["preview", record.id]);
 
+  assert.notEqual(missingConfirmation.status, 0);
+  assert.match(missingConfirmation.stderr, /--confirm-risk medium/);
   assert.equal(approval.status, 0, approval.stderr);
   assert.match(approval.stdout, /Dure Approval/);
   assert.match(approval.stdout, /new status: approved/);
   assert.match(approval.stdout, /reason: Reviewed preview output/);
+  assert.match(approval.stdout, /Approval Policy/);
+  assert.match(approval.stdout, /confirmed risk: medium/);
+  assert.match(approval.stdout, /expires at:/);
   assert.equal(preview.status, 0, preview.stderr);
   assert.match(preview.stdout, /run status: approved/);
 });
@@ -136,7 +149,14 @@ test("apply command writes an approved patch to a controlled workspace", async (
   const workspaceRoot = path.join(tempRoot, "workspace");
   const record = persistRun(tempRoot, patchProposalFixture(), "development");
 
-  const approval = runCli(tempRoot, ["approve", record.id, "--reason", "Reviewed preview output"]);
+  const approval = runCli(tempRoot, [
+    "approve",
+    record.id,
+    "--confirm-risk",
+    "medium",
+    "--reason",
+    "Reviewed preview output"
+  ]);
   const applied = runCli(tempRoot, ["apply", record.id, "--workspace", workspaceRoot]);
   const preview = runCli(tempRoot, ["preview", record.id]);
   const targetFile = path.join(workspaceRoot, "package.json");
@@ -156,7 +176,7 @@ test("apply command rejects duplicate apply", async () => {
   const workspaceRoot = path.join(tempRoot, "workspace");
   const record = persistRun(tempRoot, patchProposalFixture(), "development");
 
-  assert.equal(runCli(tempRoot, ["approve", record.id]).status, 0);
+  assert.equal(runCli(tempRoot, ["approve", record.id, "--confirm-risk", "medium"]).status, 0);
   assert.equal(runCli(tempRoot, ["apply", record.id, "--workspace", workspaceRoot]).status, 0);
   const duplicate = runCli(tempRoot, ["apply", record.id, "--workspace", workspaceRoot]);
 
@@ -169,7 +189,7 @@ test("verify command runs applied workspace scripts and updates preview status",
   const workspaceRoot = path.join(tempRoot, "workspace");
   const record = persistRun(tempRoot, patchProposalFixture(), "development");
 
-  assert.equal(runCli(tempRoot, ["approve", record.id]).status, 0);
+  assert.equal(runCli(tempRoot, ["approve", record.id, "--confirm-risk", "medium"]).status, 0);
   assert.equal(runCli(tempRoot, ["apply", record.id, "--workspace", workspaceRoot]).status, 0);
   const verification = runCli(tempRoot, ["verify", record.id, "--workspace", workspaceRoot, "--script", "test"]);
   const preview = runCli(tempRoot, ["preview", record.id]);
@@ -188,7 +208,7 @@ test("verify command returns non-zero when an applied script fails", async () =>
   const workspaceRoot = path.join(tempRoot, "workspace");
   const record = persistRun(tempRoot, failingPatchProposalFixture(), "development");
 
-  assert.equal(runCli(tempRoot, ["approve", record.id]).status, 0);
+  assert.equal(runCli(tempRoot, ["approve", record.id, "--confirm-risk", "medium"]).status, 0);
   assert.equal(runCli(tempRoot, ["apply", record.id, "--workspace", workspaceRoot]).status, 0);
   const verification = runCli(tempRoot, ["verify", record.id, "--workspace", workspaceRoot, "--script", "test"]);
   const preview = runCli(tempRoot, ["preview", record.id]);

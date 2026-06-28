@@ -90,7 +90,7 @@ User Natural Language Input
 
 9. Controlled Execution
 
-   Development patches are proposals, not automatic edits. Preview metadata is safe to inspect before approval and does not read existing file content for modify/delete diffs. `approve` and `reject` create durable approval decisions under `.dure/runs/<run-id>/approval.json`; they do not apply files or execute commands. `apply` requires an approved patch run and writes create/modify operations only into a controlled workspace, recording `apply.json`, `rollback.json`, backups, and a decision-log event. `verify` then runs only allow-listed package scripts from the applied workspace and records `workspace-verification.json`. Bug Bounty Mode produces scope records, evidence ledger entries, and report drafts only from user-supplied data until explicit authorization and rules of engagement are known.
+   Development patches are proposals, not automatic edits. Preview metadata is safe to inspect before approval and does not read existing file content for modify/delete diffs. `approve` and `reject` create durable approval decisions under `.dure/runs/<run-id>/approval.json`; approval records include a policy checklist, required risk confirmation, capability review, and expiration timestamp. They do not apply files or execute commands. `apply` requires an approved, unexpired patch run and writes create/modify operations only into a controlled workspace, recording `apply.json`, `rollback.json`, backups, and a decision-log event. `verify` then runs only allow-listed package scripts from the applied workspace and records `workspace-verification.json`. Bug Bounty Mode produces scope records, evidence ledger entries, and report drafts only from user-supplied data until explicit authorization and rules of engagement are known.
 
 10. Verification / Safety Gate
 
@@ -106,7 +106,7 @@ User Natural Language Input
 
 13. Memory / Decision Log
 
-   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, development project state, patch preview metadata, approval decisions, controlled apply records, workspace verification records, bug bounty scope intake, bug bounty evidence ledger entries, bug bounty report drafts, redacted Markdown run exports, and next recommended step.
+   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, development project state, patch preview metadata, approval policy snapshots, approval decisions, controlled apply records, workspace verification records, bug bounty scope intake, bug bounty evidence ledger entries, bug bounty report drafts, redacted Markdown run exports, and next recommended step.
 
 ## MVP Ladder For Development Mode
 

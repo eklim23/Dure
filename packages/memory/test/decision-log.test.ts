@@ -185,14 +185,24 @@ test("run store approves a verified patch proposal", async () => {
     now: new Date("2026-06-27T00:00:03.000Z")
   });
 
+  assert.throws(
+    () => store.approveRun(record.id, { now: new Date("2026-06-27T00:00:04.000Z") }),
+    /--confirm-risk medium/
+  );
+
   const approval = store.approveRun(record.id, {
     reason: "Reviewed preview output.",
+    confirmRisk: "medium",
     now: new Date("2026-06-27T00:00:04.000Z")
   });
   const preview = store.loadPreview(record.id);
 
   assert.equal(approval.decision, "approved");
   assert.equal(approval.reason, "Reviewed preview output.");
+  assert.equal(approval.policy?.riskLevel, "medium");
+  assert.equal(approval.policy?.providedRiskConfirmation, "medium");
+  assert.ok(approval.policy?.checklist.every((check) => check.status === "passed"));
+  assert.ok(approval.expiresAt);
   assert.equal(preview.metadata.status, "approved");
   assert.equal(preview.approvalRecord?.decision, "approved");
   assert.ok(preview.artifactPaths.approval);
@@ -233,7 +243,7 @@ test("run store rejects duplicate, non-patch, and unverified approvals", async (
     now: new Date("2026-06-27T00:00:07.000Z")
   });
 
-  store.approveRun(patchRecord.id, { now: new Date("2026-06-27T00:00:08.000Z") });
+  store.approveRun(patchRecord.id, { confirmRisk: "medium", now: new Date("2026-06-27T00:00:08.000Z") });
 
   assert.throws(() => store.approveRun("../outside"), /Invalid run id/);
   assert.throws(() => store.approveRun(patchRecord.id), /current status is approved/);
@@ -255,7 +265,7 @@ test("run store applies an approved patch to a controlled workspace", async () =
     now: new Date("2026-06-27T00:00:12.000Z")
   });
 
-  store.approveRun(record.id, { now: new Date("2026-06-27T00:00:13.000Z") });
+  store.approveRun(record.id, { confirmRisk: "medium", now: new Date("2026-06-27T00:00:13.000Z") });
   const applied = store.applyRun(record.id, { now: new Date("2026-06-27T00:00:14.000Z") });
   const preview = store.loadPreview(record.id);
   const appliedFile = path.join(tempRoot, ".dure", "workspaces", record.id, "package.json");
@@ -267,6 +277,33 @@ test("run store applies an approved patch to a controlled workspace", async () =
   assert.ok(existsSync(appliedFile));
   assert.equal(preview.decisionLog.entries.at(-1)?.type, "patch_applied");
   assert.throws(() => store.applyRun(record.id), /current status is applied/);
+});
+
+test("run store blocks expired approvals before apply", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-approval-expiry-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: patchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:18.000Z")
+  });
+
+  store.approveRun(record.id, {
+    confirmRisk: "medium",
+    expiresAt: new Date("2026-06-27T00:00:20.000Z"),
+    now: new Date("2026-06-27T00:00:19.000Z")
+  });
+
+  assert.throws(
+    () => store.applyRun(record.id, { now: new Date("2026-06-27T00:00:21.000Z") }),
+    /approval expired/
+  );
+  assert.equal(store.loadPreview(record.id).metadata.status, "approved");
 });
 
 test("run store verifies an applied workspace with allow-listed scripts", async () => {
@@ -283,7 +320,7 @@ test("run store verifies an applied workspace with allow-listed scripts", async 
     now: new Date("2026-06-27T00:00:23.000Z")
   });
 
-  store.approveRun(record.id, { now: new Date("2026-06-27T00:00:24.000Z") });
+  store.approveRun(record.id, { confirmRisk: "medium", now: new Date("2026-06-27T00:00:24.000Z") });
   store.applyRun(record.id, { now: new Date("2026-06-27T00:00:25.000Z") });
   const verification = store.verifyRun(record.id, {
     scripts: ["test"],
@@ -314,7 +351,7 @@ test("run store marks failed workspace verification as failed", async () => {
     now: new Date("2026-06-27T00:00:27.000Z")
   });
 
-  store.approveRun(record.id, { now: new Date("2026-06-27T00:00:28.000Z") });
+  store.approveRun(record.id, { confirmRisk: "medium", now: new Date("2026-06-27T00:00:28.000Z") });
   store.applyRun(record.id, { now: new Date("2026-06-27T00:00:29.000Z") });
   const verification = store.verifyRun(record.id, {
     scripts: ["test"],
@@ -343,7 +380,7 @@ test("run store rejects unsafe workspace verification states", async () => {
   });
 
   assert.throws(() => store.verifyRun(record.id), /current status is proposed/);
-  store.approveRun(record.id, { now: new Date("2026-06-27T00:00:32.000Z") });
+  store.approveRun(record.id, { confirmRisk: "medium", now: new Date("2026-06-27T00:00:32.000Z") });
   assert.throws(() => store.verifyRun(record.id), /current status is approved/);
   store.applyRun(record.id, {
     workspaceRoot: path.join(tempRoot, "workspace"),
@@ -369,7 +406,7 @@ test("run store records missing package.json verification as failed", async () =
     now: new Date("2026-06-27T00:00:34.000Z")
   });
 
-  store.approveRun(record.id, { now: new Date("2026-06-27T00:00:35.000Z") });
+  store.approveRun(record.id, { confirmRisk: "medium", now: new Date("2026-06-27T00:00:35.000Z") });
   store.applyRun(record.id, { now: new Date("2026-06-27T00:00:36.000Z") });
   const verification = store.verifyRun(record.id, {
     scripts: ["test"],
@@ -401,7 +438,7 @@ test("run store backs up modified files during apply", async () => {
     now: new Date("2026-06-27T00:00:15.000Z")
   });
 
-  store.approveRun(record.id, { now: new Date("2026-06-27T00:00:16.000Z") });
+  store.approveRun(record.id, { confirmRisk: "medium", now: new Date("2026-06-27T00:00:16.000Z") });
   const applied = store.applyRun(record.id, {
     workspaceRoot,
     now: new Date("2026-06-27T00:00:17.000Z")
@@ -452,8 +489,8 @@ test("run store rejects unsafe apply requests", async () => {
   });
 
   assert.throws(() => store.applyRun(proposed.id), /current status is proposed/);
-  store.approveRun(unsafe.id, { now: new Date("2026-06-27T00:00:21.000Z") });
-  store.approveRun(deletion.id, { now: new Date("2026-06-27T00:00:22.000Z") });
+  store.approveRun(unsafe.id, { confirmRisk: "medium", now: new Date("2026-06-27T00:00:21.000Z") });
+  store.approveRun(deletion.id, { confirmRisk: "medium", now: new Date("2026-06-27T00:00:22.000Z") });
   assert.throws(() => store.applyRun(unsafe.id), /Unsafe patch path/);
   assert.throws(() => store.applyRun(deletion.id), /Delete operation is not allowed/);
 });

@@ -107,11 +107,11 @@ The preview command is read-only. It loads `.dure/runs/<run-id>/`, prints the pa
 Approve or reject a persisted patch proposal:
 
 ```bash
-corepack pnpm cli -- approve <run-id> --reason "Reviewed the patch proposal"
+corepack pnpm cli -- approve <run-id> --confirm-risk medium --reason "Reviewed the patch proposal"
 corepack pnpm cli -- reject <run-id> --reason "Needs a narrower scope"
 ```
 
-Approval records `.dure/runs/<run-id>/approval.json`, updates run metadata to `approved` or `rejected`, and appends to `decision-log.jsonl`. It does not apply files, run commands, commit, push, or execute tests.
+Approval records `.dure/runs/<run-id>/approval.json`, stores a policy checklist, captures risk confirmation, sets an approval expiration timestamp, updates run metadata to `approved` or `rejected`, and appends to `decision-log.jsonl`. Medium/high risk patches and separate-approval conditions require `--confirm-risk <level>`. Approval does not apply files, run commands, commit, push, or execute tests.
 
 Apply an approved patch to a controlled workspace:
 
@@ -238,6 +238,11 @@ Run:
   - previous status: proposed
   - new status: approved
   - proposal: patch-...
+
+Approval Policy:
+  - risk: medium
+  - confirmation required: yes
+  - confirmed risk: medium
 ```
 
 Bug bounty scope example:
@@ -386,7 +391,7 @@ examples/                Future example projects
 - MoochackerAgent produces structured bug bounty safety guidance only; active testing, target access, and external requests are not executed.
 - Bug bounty evidence records are user-supplied ledger entries; Dure does not prove, reproduce, or actively test findings in v0.1.
 - Bug bounty report drafts are generated from stored evidence only; Dure does not validate findings, submit reports, or contact targets.
-- Approval records are durable gates for later controlled apply; approval itself does not modify files.
+- Approval records are durable gates for later controlled apply; approval itself does not modify files and expires before stale apply operations.
 - Controlled apply writes only approved patch content into a controlled workspace and records rollback metadata, but rollback execution is not implemented yet.
 - Proposal-time test, lint, and typecheck checks are placeholders.
 - Applied workspace verification can run allow-listed `test`, `lint`, and `typecheck` package scripts only.

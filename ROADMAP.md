@@ -14,7 +14,7 @@
 - Decision log / memory
 - Assistant-first CLI
 - Persistent run preview
-- Approval Gate for patch proposals
+- Approval Gate for patch proposals with risk confirmation, policy checklist, and expiration metadata
 - Controlled apply into a safe workspace
 - Applied workspace verification with allow-listed package scripts
 - Minimal bug bounty scope intake persistence

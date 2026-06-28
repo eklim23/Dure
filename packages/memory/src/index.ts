@@ -12,8 +12,11 @@ import {
 import path from "node:path";
 import type {
   AppliedPatchFile,
+  ApprovalCapabilityDecision,
   ApplyRecord,
   ApprovalDecision,
+  ApprovalPolicyCheck,
+  ApprovalPolicySnapshot,
   ApprovalRecord,
   AssistantAgentRole,
   AssistantRequestContext,
@@ -32,6 +35,8 @@ import type {
   DevelopmentProjectState,
   MoochackerAssessment,
   PatchChange,
+  PatchProposal,
+  RiskLevel,
   RunArtifactPaths,
   RunExportRecord,
   RunListItem,
@@ -47,6 +52,8 @@ import type {
   WorkspaceVerificationScriptName
 } from "@dure/core";
 import { WorkspaceVerifier } from "@dure/verifier";
+
+const DEFAULT_APPROVAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export class DecisionLogRecorder {
   private readonly entries: DecisionLogEntry[] = [];
@@ -83,6 +90,8 @@ export interface PersistRunInput {
 
 export interface ApprovalDecisionInput {
   readonly reason?: string;
+  readonly confirmRisk?: RiskLevel;
+  readonly expiresAt?: Date;
   readonly now?: Date;
 }
 
@@ -475,6 +484,9 @@ export class RunStore {
     if (preview.approvalRecord.proposalId !== preview.metadata.proposalId) {
       throw new Error(`Run ${runId} approval record does not match the current proposal.`);
     }
+    if (isExpiredApproval(preview.approvalRecord.expiresAt, now)) {
+      throw new Error(`Run ${runId} approval expired at ${preview.approvalRecord.expiresAt}; create a fresh approval before apply.`);
+    }
     if (preview.artifactPaths.apply && existsSync(preview.artifactPaths.apply)) {
       throw new Error(`Run ${runId} has already been applied.`);
     }
@@ -777,6 +789,19 @@ export class RunStore {
     }
 
     const nextStatus: RunStatus = decision === "approved" ? "approved" : "rejected";
+    const policy = decision === "approved"
+      ? buildApprovalPolicySnapshot(preview, input.confirmRisk)
+      : buildRejectionPolicySnapshot(preview);
+    const failedCheck = policy.checklist.find((check) => check.status === "failed");
+    if (decision === "approved" && failedCheck) {
+      throw new Error(`Run ${runId} cannot be approved; ${failedCheck.summary}`);
+    }
+    const expiresAt = decision === "approved"
+      ? (input.expiresAt ?? new Date(now.getTime() + DEFAULT_APPROVAL_TTL_MS)).toISOString()
+      : undefined;
+    if (decision === "approved" && expiresAt && Date.parse(expiresAt) <= now.getTime()) {
+      throw new Error(`Run ${runId} approval expiration must be in the future.`);
+    }
     const record: ApprovalRecord = {
       runId,
       proposalId: preview.metadata.proposalId,
@@ -784,8 +809,10 @@ export class RunStore {
       decidedBy: "user",
       reason: cleanOptionalString(input.reason),
       createdAt: now.toISOString(),
+      expiresAt,
       previousStatus: preview.metadata.status,
       nextStatus,
+      policy,
       nextRecommendedAction:
         decision === "approved"
           ? "Proceed to controlled apply in a later stage; no files were changed by approval."
@@ -801,8 +828,10 @@ export class RunStore {
         proposalId: record.proposalId,
         decision: record.decision,
         reason: record.reason,
+        expiresAt: record.expiresAt,
         previousStatus: record.previousStatus,
-        nextStatus: record.nextStatus
+        nextStatus: record.nextStatus,
+        approvalPolicy: record.policy
       },
       timestamp: now.toISOString()
     } satisfies DecisionLogEntry);
@@ -849,6 +878,129 @@ export class RunStore {
 
     writeJson(artifactPaths.metadata, metadata);
   }
+}
+
+function buildApprovalPolicySnapshot(preview: RunPreview, confirmedRisk?: RiskLevel): ApprovalPolicySnapshot {
+  const proposal = preview.proposal;
+  const patch = proposal.kind === "patch" ? proposal : undefined;
+  const previewRiskLevel = patch?.preview?.riskAssessment.overallRisk;
+  const riskLevel = previewRiskLevel ?? proposal.riskLevel;
+  const separateApprovalRequired = patch?.preview?.riskAssessment.separateApprovalRequired ?? hasDeleteChange(patch);
+  const confirmationRequired = riskLevel !== "low" || separateApprovalRequired;
+  const requiredRiskConfirmation = confirmationRequired ? riskLevel : undefined;
+  const hasMatchingConfirmation = !confirmationRequired || confirmedRisk === riskLevel;
+  const checklist: ApprovalPolicyCheck[] = [
+    {
+      id: "patch-proposal",
+      status: patch ? "passed" : "failed",
+      summary: patch ? "Run contains a patch proposal." : `Run is not a patch proposal (${proposal.kind}).`
+    },
+    {
+      id: "single-writer",
+      status: patch?.policy.singleWriter === true && isAllowedPatchWriter(patch) ? "passed" : "failed",
+      summary:
+        patch?.policy.singleWriter === true && isAllowedPatchWriter(patch)
+          ? `Patch was proposed by ${patch.author} under Single Writer policy.`
+          : "Patch proposal does not satisfy Single Writer policy."
+    },
+    {
+      id: "verification-accepted",
+      status: preview.verificationResult?.accepted === true ? "passed" : "failed",
+      summary:
+        preview.verificationResult?.accepted === true
+          ? "Proposal-time verification accepted the patch."
+          : "Proposal-time verification has not accepted the patch."
+    },
+    {
+      id: "risk-confirmation",
+      status: hasMatchingConfirmation ? "passed" : "failed",
+      summary: confirmationRequired
+        ? confirmedRisk === riskLevel
+          ? `User confirmed ${riskLevel} patch risk.`
+          : `Patch risk is ${riskLevel}; rerun approve with --confirm-risk ${riskLevel}.`
+        : "Low-risk patch does not require explicit risk confirmation."
+    },
+    {
+      id: "separate-approval",
+      status: !separateApprovalRequired || hasMatchingConfirmation ? "passed" : "failed",
+      summary: separateApprovalRequired
+        ? "Patch contains a separate-approval condition and requires matching risk confirmation."
+        : "Patch does not contain separate-approval conditions."
+    }
+  ];
+
+  return {
+    riskLevel,
+    previewRiskLevel,
+    separateApprovalRequired,
+    confirmationRequired,
+    requiredRiskConfirmation,
+    providedRiskConfirmation: confirmedRisk,
+    checklist,
+    capabilityDecisions: buildCapabilityDecisions(preview)
+  };
+}
+
+function buildRejectionPolicySnapshot(preview: RunPreview): ApprovalPolicySnapshot {
+  return {
+    riskLevel: preview.proposal.riskLevel,
+    previewRiskLevel: preview.proposal.kind === "patch" ? preview.proposal.preview?.riskAssessment.overallRisk : undefined,
+    separateApprovalRequired: preview.proposal.kind === "patch"
+      ? preview.proposal.preview?.riskAssessment.separateApprovalRequired ?? hasDeleteChange(preview.proposal)
+      : false,
+    confirmationRequired: false,
+    checklist: [
+      {
+        id: "manual-rejection",
+        status: "passed",
+        summary: "User rejected the proposal before apply."
+      }
+    ],
+    capabilityDecisions: buildCapabilityDecisions(preview)
+  };
+}
+
+function buildCapabilityDecisions(preview: RunPreview): readonly ApprovalCapabilityDecision[] {
+  return preview.context.requiredCapabilities.map((capability) => {
+    const requiresApproval = capabilityRequiresApproval(capability) || preview.safetyDecision.requiresApproval;
+    return {
+      capability,
+      requiresApproval,
+      rationale: requiresApproval
+        ? "Capability is gated by explicit user approval before execution or file changes."
+        : "Capability is passive in v0.1 and does not require an execution approval."
+    };
+  });
+}
+
+function capabilityRequiresApproval(capability: string): boolean {
+  return [
+    "propose_file_changes",
+    "apply_file_changes",
+    "run_tests_placeholder",
+    "run_local_commands_placeholder",
+    "dependency_audit_placeholder",
+    "external_scan_placeholder"
+  ].includes(capability);
+}
+
+function isAllowedPatchWriter(proposal: PatchProposal): boolean {
+  return proposal.author === "BuilderAgent" || proposal.author === "BuilderRuntime";
+}
+
+function hasDeleteChange(proposal: PatchProposal | undefined): boolean {
+  return proposal?.changes.some((change) => change.operation === "delete") ?? false;
+}
+
+function isExpiredApproval(expiresAt: string | undefined, now: Date): boolean {
+  if (!expiresAt) {
+    return false;
+  }
+  const expires = Date.parse(expiresAt);
+  if (!Number.isFinite(expires)) {
+    return true;
+  }
+  return expires <= now.getTime();
 }
 
 export function createRunId(now = new Date()): string {

@@ -496,6 +496,31 @@ export interface RunArtifactPaths {
 
 export type ApprovalDecision = "approved" | "rejected";
 
+export type ApprovalPolicyCheckStatus = "passed" | "failed";
+
+export interface ApprovalPolicyCheck {
+  readonly id: string;
+  readonly status: ApprovalPolicyCheckStatus;
+  readonly summary: string;
+}
+
+export interface ApprovalCapabilityDecision {
+  readonly capability: string;
+  readonly requiresApproval: boolean;
+  readonly rationale: string;
+}
+
+export interface ApprovalPolicySnapshot {
+  readonly riskLevel: RiskLevel;
+  readonly previewRiskLevel?: RiskLevel;
+  readonly separateApprovalRequired: boolean;
+  readonly confirmationRequired: boolean;
+  readonly requiredRiskConfirmation?: RiskLevel;
+  readonly providedRiskConfirmation?: RiskLevel;
+  readonly checklist: readonly ApprovalPolicyCheck[];
+  readonly capabilityDecisions: readonly ApprovalCapabilityDecision[];
+}
+
 export interface ApprovalRecord {
   readonly runId: string;
   readonly proposalId: string;
@@ -503,8 +528,10 @@ export interface ApprovalRecord {
   readonly decidedBy: "user";
   readonly reason?: string;
   readonly createdAt: string;
+  readonly expiresAt?: string;
   readonly previousStatus: RunStatus;
   readonly nextStatus: RunStatus;
+  readonly policy?: ApprovalPolicySnapshot;
   readonly nextRecommendedAction: string;
 }
 
