@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -13,161 +13,191 @@
         <div class="brand-lockup">
           <span class="brand-mark" aria-hidden="true">D</span>
           <div>
-            <p class="eyebrow">Stage 16 UI Prototype</p>
-            <h1>Dure Console</h1>
+            <p class="eyebrow">Dure Console v0.1</p>
+            <h1>Dure와 대화 중</h1>
           </div>
         </div>
-        <section class="mode-switcher" aria-label="Mode selector">
+        <section class="mode-switcher" aria-label="모드 선택">
           <button class="mode-button active" type="button" data-mode-choice="development" aria-pressed="true">
             <span class="mode-light" aria-hidden="true"></span>
-            Development
+            개발 모드
           </button>
           <button class="mode-button" type="button" data-mode-choice="bug-bounty" aria-pressed="false">
             <span class="mode-light" aria-hidden="true"></span>
-            Bug Bounty / Security
+            버그바운티 모드
           </button>
         </section>
       </header>
 
-      <section class="status-strip" aria-label="Current prototype state">
+      <section class="status-strip" aria-label="현재 상태">
         <div>
-          <span class="strip-label">Mode</span>
-          <strong id="mode-title">Development Mode</strong>
+          <span class="strip-label">현재 모드</span>
+          <strong id="mode-title">개발 모드</strong>
         </div>
         <div>
-          <span class="strip-label">Stage</span>
+          <span class="strip-label">현재 단계</span>
           <strong id="stage-title">UI Prototype</strong>
         </div>
         <div>
-          <span class="strip-label">Safety</span>
-          <strong>Read-only simulation</strong>
+          <span class="strip-label">안전 상태</span>
+          <strong>읽기 전용 미리보기</strong>
         </div>
         <div>
           <span class="strip-label">PM Gate</span>
-          <strong>Approved for static preview</strong>
+          <strong>정적 화면 승인</strong>
         </div>
       </section>
 
-      <section class="snapshot-panel" aria-label="Run snapshot import">
-        <div class="snapshot-heading">
-          <div>
-            <p class="eyebrow">Run Snapshot</p>
-            <h2>Console Data Preview</h2>
-          </div>
-          <label class="file-button" for="snapshot-file">
-            Import JSON
-            <input id="snapshot-file" type="file" accept="application/json,.json">
-          </label>
-        </div>
-        <div class="snapshot-grid" id="snapshot-grid" aria-live="polite">
-          <div>
-            <span class="strip-label">Run</span>
-            <strong id="snapshot-run">not loaded</strong>
-          </div>
-          <div>
-            <span class="strip-label">Status</span>
-            <strong id="snapshot-status">waiting</strong>
-          </div>
-          <div>
-            <span class="strip-label">Proposal</span>
-            <strong id="snapshot-proposal">not loaded</strong>
-          </div>
-          <div>
-            <span class="strip-label">Decisions</span>
-            <strong id="snapshot-decisions">0</strong>
-          </div>
-          <div>
-            <span class="strip-label">Project</span>
-            <strong id="snapshot-project">not loaded</strong>
-          </div>
-          <div>
-            <span class="strip-label">Scripts</span>
-            <strong id="snapshot-scripts">not loaded</strong>
-          </div>
-          <div>
-            <span class="strip-label">Patch Risk</span>
-            <strong id="snapshot-patch-risk">not loaded</strong>
-          </div>
-          <div>
-            <span class="strip-label">Files</span>
-            <strong id="snapshot-patch-files">0</strong>
-          </div>
-        </div>
-      </section>
+      <div class="control-room">
+        <aside class="agent-panel" aria-label="에이전트 선택과 설정">
+          <section class="panel-block">
+            <div class="panel-heading">
+              <p class="eyebrow">Agent</p>
+              <h2>에이전트 선택</h2>
+            </div>
+            <div id="agent-list" class="agent-list" role="listbox" aria-label="에이전트 선택"></div>
+          </section>
 
-      <div class="workspace">
-        <aside class="agent-roster" aria-label="Agent roster">
-          <div class="panel-heading">
-            <p class="eyebrow">Agent Field</p>
-            <h2>Working Dots</h2>
-          </div>
-          <div id="agent-list" class="agent-list" role="listbox" aria-label="Select an agent"></div>
+          <section class="panel-block settings-panel" aria-label="에이전트 설정">
+            <div class="panel-heading">
+              <p class="eyebrow">Settings</p>
+              <h2>에이전트 설정</h2>
+            </div>
+            <div class="selected-agent-card">
+              <span id="setting-agent-mark" class="agent-glyph shape-circle" aria-hidden="true"></span>
+              <div>
+                <strong id="setting-agent-name">PMAgent</strong>
+                <span id="setting-agent-role">제품 관리자</span>
+              </div>
+            </div>
+            <label class="toggle-row">
+              <input id="setting-autospeak" type="checkbox">
+              <span>회의에서 자동 발언</span>
+            </label>
+            <label class="control-row">
+              <span>참여도</span>
+              <input id="setting-participation" type="range" min="0" max="100" step="5">
+              <strong id="setting-participation-value">70%</strong>
+            </label>
+            <label class="control-row">
+              <span>응답 톤</span>
+              <select id="setting-tone">
+                <option value="balanced">균형</option>
+                <option value="strict">엄격</option>
+                <option value="friendly">친절</option>
+                <option value="security">보안 중심</option>
+              </select>
+            </label>
+            <label class="control-row">
+              <span>권한</span>
+              <select id="setting-authority">
+                <option value="advise">조언</option>
+                <option value="review">검토</option>
+                <option value="block">차단 요청</option>
+                <option value="approve">PM 승인</option>
+              </select>
+            </label>
+          </section>
         </aside>
 
-        <section class="board-column" aria-label="Agent activity board">
-          <div class="council-board" id="agent-field">
-            <div class="field-grid" aria-hidden="true"></div>
-            <div class="field-orbit orbit-one" aria-hidden="true"></div>
-            <div class="field-orbit orbit-two" aria-hidden="true"></div>
-            <div class="dure-core" aria-label="Dure coordination core">
-              <span>Dure</span>
-              <small id="core-mode">Development Mode</small>
-            </div>
-            <div class="lane-label lane-left">Design Council</div>
-            <div class="lane-label lane-right">Review Gate</div>
-            <div id="agent-nodes" class="agent-nodes"></div>
-          </div>
-
-          <section class="conversation-panel" aria-label="Curated agent discussion">
+        <section class="conversation-column" aria-label="Dure 대화 영역">
+          <section class="chat-panel">
             <div class="conversation-header">
               <div>
-                <p class="eyebrow">Visible Discussion</p>
-                <h2 id="conversation-title">PM approval and UI council notes</h2>
+                <p class="eyebrow">Current Conversation</p>
+                <h2 id="conversation-target">현재 대화 상대: Dure 조율자</h2>
               </div>
-              <span class="simulation-pill">simulated transcript</span>
+              <span id="talk-route" class="route-pill">나 → Dure → PMAgent</span>
             </div>
-            <div id="conversation-list" class="conversation-list"></div>
+            <div class="active-agent-summary">
+              <div>
+                <span class="strip-label">선택된 에이전트</span>
+                <strong id="agent-name">PMAgent</strong>
+              </div>
+              <div>
+                <span class="strip-label">역할</span>
+                <strong id="agent-role">제품 관리자</strong>
+              </div>
+              <div>
+                <span class="strip-label">상태</span>
+                <strong id="agent-status">범위 승인 중</strong>
+              </div>
+            </div>
+            <div id="dialogue-list" class="dialogue-list" aria-live="polite"></div>
+            <div class="composer-preview" aria-label="입력 대상">
+              <span>입력 대상</span>
+              <strong>Dure</strong>
+              <p id="agent-focus">사용자 요청을 Dure가 받아 에이전트 회의로 전달합니다.</p>
+            </div>
+          </section>
+
+          <section class="snapshot-panel" aria-label="실행 기록 불러오기">
+            <div class="snapshot-heading">
+              <div>
+                <p class="eyebrow">Run Snapshot</p>
+                <h2>실행 기록 미리보기</h2>
+              </div>
+              <label class="file-button" for="snapshot-file">
+                JSON 불러오기
+                <input id="snapshot-file" type="file" accept="application/json,.json">
+              </label>
+            </div>
+            <div class="snapshot-grid" id="snapshot-grid" aria-live="polite">
+              <div>
+                <span class="strip-label">Run</span>
+                <strong id="snapshot-run">불러오지 않음</strong>
+              </div>
+              <div>
+                <span class="strip-label">상태</span>
+                <strong id="snapshot-status">대기 중</strong>
+              </div>
+              <div>
+                <span class="strip-label">제안</span>
+                <strong id="snapshot-proposal">불러오지 않음</strong>
+              </div>
+              <div>
+                <span class="strip-label">결정</span>
+                <strong id="snapshot-decisions">0</strong>
+              </div>
+              <div>
+                <span class="strip-label">프로젝트</span>
+                <strong id="snapshot-project">불러오지 않음</strong>
+              </div>
+              <div>
+                <span class="strip-label">스크립트</span>
+                <strong id="snapshot-scripts">불러오지 않음</strong>
+              </div>
+              <div>
+                <span class="strip-label">패치 위험도</span>
+                <strong id="snapshot-patch-risk">불러오지 않음</strong>
+              </div>
+              <div>
+                <span class="strip-label">파일</span>
+                <strong id="snapshot-patch-files">0</strong>
+              </div>
+            </div>
           </section>
         </section>
 
-        <aside class="inspector" aria-label="Selected agent details">
-          <div class="panel-heading">
-            <p class="eyebrow">Inspector</p>
-            <h2 id="agent-name">PMAgent</h2>
-          </div>
-          <dl class="agent-meta">
-            <div>
-              <dt>Role</dt>
-              <dd id="agent-role">Product manager</dd>
+        <aside class="council-column" aria-label="에이전트 회의">
+          <section class="council-board" id="agent-field">
+            <div class="field-grid" aria-hidden="true"></div>
+            <div class="dure-core" aria-label="Dure coordination core">
+              <span>Dure</span>
+              <small id="core-mode">개발 모드</small>
             </div>
-            <div>
-              <dt>Status</dt>
-              <dd id="agent-status">Approving prototype scope</dd>
-            </div>
-            <div>
-              <dt>Focus</dt>
-              <dd id="agent-focus">Keep the UI static, safe, and useful.</dd>
-            </div>
-          </dl>
-
-          <section class="inspector-section">
-            <h3>Current Assignment</h3>
-            <p id="agent-assignment"></p>
+            <div id="agent-nodes" class="agent-nodes"></div>
           </section>
 
-          <section class="inspector-section">
-            <h3>Position</h3>
-            <p id="agent-stance"></p>
-          </section>
-
-          <section class="inspector-section">
-            <h3>Needs</h3>
-            <ul id="agent-needs" class="clean-list"></ul>
-          </section>
-
-          <section class="inspector-section">
-            <h3>Guardrails</h3>
-            <ul id="agent-risks" class="clean-list"></ul>
+          <section class="council-notes" aria-label="에이전트 논의">
+            <div class="conversation-header">
+              <div>
+                <p class="eyebrow">Agent Council</p>
+                <h2 id="conversation-title">선택된 에이전트의 논의</h2>
+              </div>
+              <span class="simulation-pill">정적 transcript</span>
+            </div>
+            <div id="conversation-list" class="conversation-list"></div>
           </section>
         </aside>
       </div>

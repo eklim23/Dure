@@ -1,35 +1,35 @@
 # Dure Console Prototype
 
-`apps/ui` is a static, read-only Stage 16 prototype for visualizing how Dure's agents coordinate.
+`apps/ui`는 Dure 에이전트 흐름을 보여주는 정적 읽기 전용 UI prototype입니다.
 
-Open `index.html` directly in a browser. The prototype has no backend, no network calls, no persistence, no target access, and no patch application behavior.
+브라우저에서 `index.html`을 열거나 로컬 정적 서버로 실행할 수 있습니다. 이 화면은 backend, network call, persistence, target access, patch apply 동작을 수행하지 않습니다.
 
-## What It Shows
+## 보여주는 것
 
-- Development Mode with green operational lighting
-- Bug Bounty / Security Mode with red operational lighting
-- Clickable agent dots with distinct shapes
-- Curated internal discussion notes for each agent
-- Import of redacted `dure console-data` JSON snapshots
-- Snapshot summaries for detected project state and development patch preview risk
-- PM approval criteria for the prototype scope
-- Explicit simulated/read-only status copy
+- 사용자는 Dure와 대화하고, Dure가 선택된 에이전트에게 전달하는 구조
+- 에이전트별 설정 미리보기
+- Development Mode의 초록 작업 상태
+- Bug Bounty Mode의 빨간 보안 상태
+- 형태가 다른 움직이는 agent dot
+- 선택한 에이전트 기준의 논의 transcript
+- redacted `dure console-data` JSON snapshot import
+- 실행 기록, 프로젝트 상태, patch preview risk 요약
 
-## Inspect A Run Snapshot
+## Run Snapshot 확인
 
-Generate a read-only UI snapshot from the CLI:
+CLI에서 읽기 전용 UI snapshot을 생성합니다.
 
 ```bash
 corepack pnpm cli -- console-data <run-id> --output .dure/runs/<run-id>/console-data.json
 ```
 
-Then open `index.html` and import that JSON from the Run Snapshot panel.
+그다음 UI의 `JSON 불러오기`에서 해당 파일을 선택합니다.
 
-## What It Does Not Do
+## 하지 않는 것
 
-- It does not execute tasks.
-- It does not call an LLM provider.
-- It does not read or write run records.
-- It does not scan targets or make HTTP requests.
-- It does not approve, apply, or verify patches.
-- It does not treat imported diff text as executable change data.
+- 작업 실행
+- LLM provider 호출
+- run record 읽기/쓰기
+- target scan 또는 HTTP request
+- patch approve/apply/verify
+- imported diff text를 실행 가능한 변경으로 처리

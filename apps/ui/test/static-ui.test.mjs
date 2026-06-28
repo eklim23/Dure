@@ -11,15 +11,23 @@ async function readProjectFile(path) {
 test("static prototype exposes the required UI anchors", async () => {
   const html = await readProjectFile("index.html");
 
+  assert.match(html, /<html lang="ko">/);
   assert.match(html, /id="agent-field"/);
   assert.match(html, /data-mode="development"/);
   assert.match(html, /data-mode-choice="development"/);
   assert.match(html, /data-mode-choice="bug-bounty"/);
+  assert.match(html, /Dure와 대화 중/);
+  assert.match(html, /현재 대화 상대: Dure 조율자/);
+  assert.match(html, /에이전트 설정/);
+  assert.match(html, /id="setting-autospeak"/);
+  assert.match(html, /id="setting-participation"/);
+  assert.match(html, /id="setting-tone"/);
+  assert.match(html, /id="setting-authority"/);
   assert.match(html, /id="snapshot-file"/);
   assert.match(html, /id="snapshot-project"/);
   assert.match(html, /id="snapshot-patch-risk"/);
-  assert.match(html, /simulated transcript/);
-  assert.match(html, /Read-only simulation/);
+  assert.match(html, /정적 transcript/);
+  assert.match(html, /읽기 전용 미리보기/);
 });
 
 test("mode colors, agent dots, and reduced-motion styles are present", async () => {
@@ -36,8 +44,11 @@ test("prototype logic remains local and read-only", async () => {
   const js = await readProjectFile("app.js");
 
   assert.match(js, /const agents = \[/);
+  assert.match(js, /const agentSettings = /);
   assert.match(js, /const conversations = \[/);
   assert.match(js, /function renderAgents/);
+  assert.match(js, /function renderSettings/);
+  assert.match(js, /function renderDialogue/);
   assert.match(js, /function selectAgent/);
   assert.match(js, /function applyConsoleSnapshot/);
   assert.match(js, /function summarizeSnapshotProject/);

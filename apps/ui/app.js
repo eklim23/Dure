@@ -1,11 +1,14 @@
 const app = document.querySelector("#app");
 const agentList = document.querySelector("#agent-list");
 const agentNodes = document.querySelector("#agent-nodes");
+const dialogueList = document.querySelector("#dialogue-list");
 const conversationList = document.querySelector("#conversation-list");
 const modeTitle = document.querySelector("#mode-title");
 const stageTitle = document.querySelector("#stage-title");
 const coreMode = document.querySelector("#core-mode");
 const conversationTitle = document.querySelector("#conversation-title");
+const conversationTarget = document.querySelector("#conversation-target");
+const talkRoute = document.querySelector("#talk-route");
 const snapshotFile = document.querySelector("#snapshot-file");
 const snapshotFields = {
   run: document.querySelector("#snapshot-run"),
@@ -22,25 +25,34 @@ const details = {
   name: document.querySelector("#agent-name"),
   role: document.querySelector("#agent-role"),
   status: document.querySelector("#agent-status"),
-  focus: document.querySelector("#agent-focus"),
-  assignment: document.querySelector("#agent-assignment"),
-  stance: document.querySelector("#agent-stance"),
-  needs: document.querySelector("#agent-needs"),
-  risks: document.querySelector("#agent-risks")
+  focus: document.querySelector("#agent-focus")
+};
+
+const settingFields = {
+  mark: document.querySelector("#setting-agent-mark"),
+  name: document.querySelector("#setting-agent-name"),
+  role: document.querySelector("#setting-agent-role"),
+  autospeak: document.querySelector("#setting-autospeak"),
+  participation: document.querySelector("#setting-participation"),
+  participationValue: document.querySelector("#setting-participation-value"),
+  tone: document.querySelector("#setting-tone"),
+  authority: document.querySelector("#setting-authority")
 };
 
 const modeContent = {
   development: {
-    title: "Development Mode",
-    stage: "Stage 16 UI Prototype",
-    conversation: "PM approval and UI council notes",
-    core: "Development Mode"
+    title: "개발 모드",
+    stage: "UI Prototype",
+    conversation: "개발 에이전트 논의",
+    core: "개발 모드",
+    target: "현재 대화 상대: Dure 조율자"
   },
   "bug-bounty": {
-    title: "Bug Bounty / Security Mode",
+    title: "버그바운티 모드",
     stage: "Scope-safe UI Preview",
-    conversation: "Security-mode council notes",
-    core: "Bug Bounty Mode"
+    conversation: "보안 에이전트 논의",
+    core: "버그바운티 모드",
+    target: "현재 대화 상대: Dure 조율자"
   }
 };
 
@@ -48,243 +60,163 @@ const agents = [
   {
     id: "pm",
     name: "PMAgent",
-    role: "Product manager",
-    status: "Approving prototype scope",
-    focus: "Keep the UI static, safe, and useful.",
+    role: "제품 관리자",
+    status: "범위 승인 중",
+    focus: "사용자 목표를 MVP 단위로 줄이고 다음 결정을 잠급니다.",
     shape: "circle",
     state: "coordinating",
     color: "#d9a441",
-    size: 64,
+    size: 62,
     x: "50%",
-    y: "18%",
-    assignment:
-      "Lock the acceptance criteria: visible agents, readable discussion, green development mode, red security mode, and no production-like actions.",
-    stance:
-      "The first UI should make Dure's coordination model obvious without pretending it is a live operations console.",
-    needs: [
-      "Clear static/read-only labeling",
-      "Clickable agents with useful details",
-      "No claims of live scanning, applying, or execution"
-    ],
-    risks: [
-      "Users may confuse a mock transcript with live agent execution",
-      "Security visuals must not imply unauthorized testing capability"
-    ]
+    y: "16%",
+    defaults: { autospeak: true, participation: 80, tone: "balanced", authority: "approve" }
   },
   {
     id: "designer-a",
     name: "UIDesignerA",
-    role: "Spatial systems designer",
-    status: "Mapping agent activity",
-    focus: "Make coordination visible at a glance.",
+    role: "공간 UI 디자이너",
+    status: "작업판 구조 조정",
+    focus: "에이전트가 일하는 흐름을 한눈에 보이게 만듭니다.",
     shape: "square",
     state: "designing",
     color: "#62c9a2",
-    size: 56,
+    size: 54,
     x: "24%",
     y: "34%",
-    assignment:
-      "Create the operational field: Dure in the center, agent dots around it, and motion that reads as work rather than decoration.",
-    stance:
-      "Dure should feel like a calm command room: compact, alive, and anchored in the user's current mode.",
-    needs: [
-      "A central coordination core",
-      "Mode lighting that changes the whole environment",
-      "Motion that remains readable with reduced-motion support"
-    ],
-    risks: [
-      "Too much animation can hide the information hierarchy",
-      "A visual-only state system would be inaccessible"
-    ]
+    defaults: { autospeak: true, participation: 65, tone: "friendly", authority: "advise" }
   },
   {
     id: "designer-b",
     name: "UIDesignerB",
-    role: "Conversation experience designer",
-    status: "Curating discussion flow",
-    focus: "Show what agents are thinking without faking autonomy.",
+    role: "대화 UX 디자이너",
+    status: "대화 상대 표시 개선",
+    focus: "사용자가 Dure와 대화 중인지, 특정 에이전트와 협의 중인지 분명히 보여줍니다.",
     shape: "capsule",
     state: "designing",
     color: "#5f9ce6",
-    size: 54,
+    size: 52,
     x: "76%",
     y: "34%",
-    assignment:
-      "Turn the internal council into a readable, selected-agent transcript with speaker identity, type, and rationale.",
-    stance:
-      "The UI should show curated discussion notes, not pretend that hidden agents are continuously chatting in real time.",
-    needs: [
-      "A transcript area tied to the selected agent",
-      "Speaker labels and decision types",
-      "Explicit simulated transcript copy"
-    ],
-    risks: [
-      "A fake live chat could reduce trust",
-      "Long text blocks can make the console feel slow"
-    ]
+    defaults: { autospeak: true, participation: 70, tone: "friendly", authority: "review" }
   },
   {
     id: "designer-c",
     name: "UIDesignerC",
-    role: "Visual systems designer",
-    status: "Defining shapes and contrast",
-    focus: "Different dots must look different even without color.",
+    role: "비주얼 시스템 디자이너",
+    status: "도트 형태와 대비 검토",
+    focus: "색만이 아니라 형태와 위치로 에이전트를 구분합니다.",
     shape: "diamond",
     state: "designing",
     color: "#a78bfa",
-    size: 52,
-    x: "35%",
-    y: "70%",
-    assignment:
-      "Give every agent a distinct silhouette, readable label, and color while preserving contrast across green and red modes.",
-    stance:
-      "Dure can look special through motion, spacing, and identity rules instead of decorative clutter.",
-    needs: [
-      "Shape-coded agent roles",
-      "Readable labels on desktop and mobile",
-      "Mode color as environment, not the only state"
-    ],
-    risks: [
-      "Color-only state would fail accessibility expectations",
-      "Tiny labels can clip on mobile"
-    ]
+    size: 50,
+    x: "36%",
+    y: "72%",
+    defaults: { autospeak: false, participation: 55, tone: "balanced", authority: "advise" }
   },
   {
     id: "developer",
     name: "DeveloperAgent",
-    role: "Implementation owner",
-    status: "Building static prototype",
-    focus: "Ship a no-dependency UI that can be opened directly.",
+    role: "구현 담당",
+    status: "패치 제안 준비",
+    focus: "작고 검증 가능한 개발 단계를 패치 미리보기로 정리합니다.",
     shape: "hex",
     state: "coordinating",
     color: "#78e6b0",
-    size: 58,
+    size: 56,
     x: "66%",
-    y: "66%",
-    assignment:
-      "Implement HTML, CSS, and JavaScript with no backend, no package dependencies, and tests that guard against accidental network behavior.",
-    stance:
-      "A static prototype is the right first step because it proves the product language without expanding runtime risk.",
-    needs: [
-      "Simple files under apps/ui",
-      "Tests for required UI anchors and no network calls",
-      "Documentation that says this is not production"
-    ],
-    risks: [
-      "Adding a framework too early would increase maintenance load",
-      "Prototype code should not touch run records yet"
-    ]
+    y: "68%",
+    defaults: { autospeak: true, participation: 75, tone: "balanced", authority: "review" }
   },
   {
     id: "moochacker",
     name: "MoochackerAgent",
-    role: "Bug bounty safety reviewer",
-    status: "Checking security-mode boundaries",
-    focus: "Keep red mode scope-safe and passive.",
+    role: "모의해킹 안전 리뷰어",
+    status: "허가 범위 확인",
+    focus: "버그바운티 흐름이 허가된 범위와 수동 기록 안에 머물도록 봅니다.",
     shape: "triangle",
     state: "guarding",
     color: "#ff8a78",
-    size: 58,
+    size: 56,
     x: "20%",
     y: "58%",
-    assignment:
-      "Make sure Bug Bounty Mode communicates scope, authorization, evidence, and stop conditions without implying live testing.",
-    stance:
-      "Red mode should feel serious and defensive: it is for authorized planning, not target interaction in this prototype.",
-    needs: [
-      "Visible read-only status",
-      "No scan, attack, exploit, or target-access controls",
-      "Clear scope-safe security language"
-    ],
-    risks: [
-      "Aggressive wording could imply unauthorized offensive activity",
-      "A red theme must still feel controlled, not alarmist"
-    ]
+    defaults: { autospeak: true, participation: 85, tone: "security", authority: "block" }
   },
   {
     id: "reviewer",
     name: "ReviewerAgent",
-    role: "Quality reviewer",
-    status: "Reviewing acceptance criteria",
-    focus: "Check usability, safety, and maintainability.",
+    role: "품질 리뷰어",
+    status: "수용 기준 검토",
+    focus: "설정, 대화 표시, 안전 문구, 반응형 레이아웃을 검토합니다.",
     shape: "diamond",
     state: "reviewing",
     color: "#db6b73",
     size: 50,
     x: "82%",
     y: "58%",
-    assignment:
-      "Review the UI against PM criteria: no destructive actions, no clipped text, mode clarity, and agent detail discoverability.",
-    stance:
-      "The prototype is acceptable only if it is clearly safe, responsive, and honest about what is simulated.",
-    needs: [
-      "Smoke tests for static safety",
-      "Responsive layout checks in CSS",
-      "Obvious selected-agent states"
-    ],
-    risks: [
-      "Mode buttons must not look like they trigger real workflows",
-      "Long agent names need stable layout constraints"
-    ]
+    defaults: { autospeak: true, participation: 70, tone: "strict", authority: "review" }
   }
 ];
+
+const agentSettings = Object.fromEntries(
+  agents.map((agent) => [agent.id, { ...agent.defaults }])
+);
 
 const conversations = [
   {
     mode: "all",
     agentId: "pm",
-    kind: "PM Decision",
-    title: "Scope approved",
+    kind: "PM 결정",
+    title: "대화 주체 고정",
     body:
-      "Approved as a Stage 16 static prototype. It may visualize agents, mode lighting, and curated discussion, but it must not execute, persist, scan, approve, apply, or call a backend."
-  },
-  {
-    mode: "all",
-    agentId: "designer-a",
-    kind: "Design Proposal",
-    title: "Operational field",
-    body:
-      "Place Dure at the center and let each agent move around it with a different silhouette. Motion should read as coordination, not as decoration."
+      "사용자는 항상 Dure와 대화합니다. Dure가 선택된 에이전트에게 내용을 전달하고, 필요한 검토 결과를 다시 사용자에게 정리합니다."
   },
   {
     mode: "all",
     agentId: "designer-b",
-    kind: "UX Proposal",
-    title: "Readable council notes",
+    kind: "UX 제안",
+    title: "현재 대화 상대 표시",
     body:
-      "When an agent is selected, show a curated transcript and inspector details. Label the transcript as simulated so the user understands it is a preview."
+      "상단 제목과 대화 경로에 현재 사용자가 말하는 대상, 선택된 에이전트, 회의 전달 경로를 함께 보여줍니다."
+  },
+  {
+    mode: "all",
+    agentId: "designer-a",
+    kind: "UI 제안",
+    title: "도트는 보조 정보",
+    body:
+      "움직이는 도트는 에이전트 활동을 보여주는 보조 화면으로 낮추고, 실제 작업은 대화와 설정 패널에서 보이게 합니다."
   },
   {
     mode: "all",
     agentId: "designer-c",
-    kind: "Visual System",
-    title: "Shape-coded agents",
+    kind: "비주얼 기준",
+    title: "한국어 중심 인터페이스",
     body:
-      "Use circles, capsules, diamonds, squares, triangles, and hexagons so agent identity does not depend on color alone."
+      "레이블, 상태, 안내 문구를 한국어로 정리하고 에이전트 이름은 고유 식별자로 유지합니다."
   },
   {
     mode: "development",
     agentId: "developer",
-    kind: "Build Note",
-    title: "Green development state",
+    kind: "개발 메모",
+    title: "패치 제안 중심",
     body:
-      "Development Mode uses green operational lighting and focuses the console on planning, patch preview, review, and verification boundaries."
+      "개발 모드에서는 Dure가 요구사항을 받고 Builder/Reviewer 흐름으로 작고 안전한 패치 제안을 준비합니다."
   },
   {
     mode: "bug-bounty",
     agentId: "moochacker",
-    kind: "Safety Note",
-    title: "Red security state",
+    kind: "보안 메모",
+    title: "허가 범위 우선",
     body:
-      "Bug Bounty Mode uses red security lighting but remains passive. The prototype shows authorization, scope, and evidence concerns without target interaction."
+      "버그바운티 모드에서는 실제 대상 접근 없이 scope, evidence, report draft를 수동 기록 중심으로 다룹니다."
   },
   {
     mode: "all",
     agentId: "reviewer",
-    kind: "Review Note",
-    title: "Honest controls",
+    kind: "리뷰",
+    title: "정적 화면 경계",
     body:
-      "Buttons in this prototype only change local display state. They are not connected to real run records, external tools, scans, or patch application."
+      "이 화면의 설정은 로컬 미리보기 상태입니다. 실행, 승인, 적용, 스캔, 외부 요청은 수행하지 않습니다."
   }
 ];
 
@@ -300,24 +232,34 @@ function setText(node, value) {
   node.textContent = value;
 }
 
-function renderListItems(container, items) {
-  container.replaceChildren(
-    ...items.map((item) => {
-      const li = document.createElement("li");
-      li.textContent = item;
-      return li;
-    })
-  );
+function toneLabel(value) {
+  return {
+    balanced: "균형",
+    strict: "엄격",
+    friendly: "친절",
+    security: "보안 중심"
+  }[value];
+}
+
+function authorityLabel(value) {
+  return {
+    advise: "조언",
+    review: "검토",
+    block: "차단 요청",
+    approve: "PM 승인"
+  }[value];
 }
 
 function renderAgents() {
   agentList.replaceChildren(
     ...agents.map((agent) => {
+      const settings = agentSettings[agent.id];
       const button = document.createElement("button");
       const glyph = document.createElement("span");
       const textWrap = document.createElement("span");
       const name = document.createElement("strong");
       const role = document.createElement("span");
+      const meta = document.createElement("small");
 
       button.type = "button";
       button.className = "agent-row";
@@ -329,7 +271,8 @@ function renderAgents() {
       glyph.setAttribute("aria-hidden", "true");
       name.textContent = agent.name;
       role.textContent = agent.role;
-      textWrap.append(name, role);
+      meta.textContent = `${settings.participation}% · ${authorityLabel(settings.authority)}`;
+      textWrap.append(name, role, meta);
       button.append(glyph, textWrap);
       return button;
     })
@@ -347,7 +290,7 @@ function renderAgents() {
       button.style.setProperty("--size", `${agent.size}px`);
       button.style.setProperty("--x", agent.x);
       button.style.setProperty("--y", agent.y);
-      button.setAttribute("aria-label", `Select ${agent.name}, ${agent.role}`);
+      button.setAttribute("aria-label", `${agent.name} 선택, ${agent.role}`);
       const label = document.createElement("span");
       label.textContent = agent.name.slice(0, 2);
       button.append(label);
@@ -356,16 +299,69 @@ function renderAgents() {
   );
 }
 
+function renderSettings() {
+  const agent = agentById(selectedAgentId);
+  const settings = agentSettings[selectedAgentId];
+  settingFields.mark.className = `agent-glyph shape-${agent.shape}`;
+  settingFields.mark.style.setProperty("--agent-color", agent.color);
+  setText(settingFields.name, agent.name);
+  setText(settingFields.role, agent.role);
+  settingFields.autospeak.checked = settings.autospeak;
+  settingFields.participation.value = String(settings.participation);
+  setText(settingFields.participationValue, `${settings.participation}%`);
+  settingFields.tone.value = settings.tone;
+  settingFields.authority.value = settings.authority;
+}
+
 function renderInspector() {
   const agent = agentById(selectedAgentId);
+  const settings = agentSettings[selectedAgentId];
   setText(details.name, agent.name);
   setText(details.role, agent.role);
   setText(details.status, agent.status);
-  setText(details.focus, agent.focus);
-  setText(details.assignment, agent.assignment);
-  setText(details.stance, agent.stance);
-  renderListItems(details.needs, agent.needs);
-  renderListItems(details.risks, agent.risks);
+  setText(
+    details.focus,
+    `${agent.focus} 설정: ${settings.autospeak ? "자동 발언 켜짐" : "자동 발언 꺼짐"}, ${settings.participation}% 참여, ${toneLabel(settings.tone)} 톤, ${authorityLabel(settings.authority)} 권한.`
+  );
+  setText(conversationTarget, "현재 대화 상대: Dure 조율자");
+  setText(talkRoute, `나 → Dure → ${agent.name}`);
+}
+
+function renderDialogue() {
+  const agent = agentById(selectedAgentId);
+  const settings = agentSettings[selectedAgentId];
+  const rows = [
+    {
+      speaker: "나",
+      route: "사용자 → Dure",
+      body: "자연어로 목표를 말하면 Dure가 먼저 의도를 정리합니다."
+    },
+    {
+      speaker: "Dure",
+      route: `Dure → ${agent.name}`,
+      body: `${agent.name}에게 ${authorityLabel(settings.authority)} 관점으로 검토를 요청합니다.`
+    },
+    {
+      speaker: agent.name,
+      route: `${agent.role} → Dure`,
+      body: `${toneLabel(settings.tone)} 톤으로 응답하고, 참여도 ${settings.participation}%로 회의에 반영됩니다.`
+    }
+  ];
+
+  dialogueList.replaceChildren(
+    ...rows.map((row) => {
+      const article = document.createElement("article");
+      const speaker = document.createElement("strong");
+      const route = document.createElement("span");
+      const body = document.createElement("p");
+      article.className = "dialogue-row";
+      speaker.textContent = row.speaker;
+      route.textContent = row.route;
+      body.textContent = row.body;
+      article.append(speaker, route, body);
+      return article;
+    })
+  );
 }
 
 function renderConversation() {
@@ -379,7 +375,6 @@ function renderConversation() {
     ...visible.map((entry) => {
       const agent = agentById(entry.agentId);
       const article = document.createElement("article");
-      article.className = "conversation-entry";
       const speaker = document.createElement("div");
       const speakerName = document.createElement("strong");
       const speakerRole = document.createElement("span");
@@ -388,6 +383,7 @@ function renderConversation() {
       const title = document.createElement("h3");
       const text = document.createElement("p");
 
+      article.className = "conversation-entry";
       speaker.className = "speaker";
       body.className = "entry-body";
       kind.className = "entry-kind";
@@ -419,13 +415,16 @@ function updateMode(mode) {
   setText(stageTitle, content.stage);
   setText(coreMode, content.core);
   setText(conversationTitle, content.conversation);
+  setText(conversationTarget, content.target);
   renderConversation();
 }
 
 function selectAgent(agentId) {
   selectedAgentId = agentId;
   renderAgents();
+  renderSettings();
   renderInspector();
+  renderDialogue();
   renderConversation();
 }
 
@@ -464,35 +463,35 @@ function patchPreviewEntries(snapshot) {
       mode: "development",
       agentId: "developer",
       kind: "Patch Preview",
-      title: `Risk ${preview.riskAssessment.overallRisk}`,
-      body: `${preview.summary} Files: ${preview.changePlan.map((change) => `${change.operation} ${change.path}`).join(", ")}.`
+      title: `위험도 ${preview.riskAssessment.overallRisk}`,
+      body: `${preview.summary} 대상 파일: ${preview.changePlan.map((change) => `${change.operation} ${change.path}`).join(", ")}.`
     }
   ];
 }
 
 function summarizeSnapshotProject(snapshot) {
   if (!snapshot.projectState) {
-    return "not recorded";
+    return "기록 없음";
   }
   return `${snapshot.projectState.packageManager} / stage ${snapshot.projectState.currentMvpStage.id}`;
 }
 
 function summarizeSnapshotScripts(snapshot) {
   if (!snapshot.projectState) {
-    return "not recorded";
+    return "기록 없음";
   }
   return snapshot.projectState.configuredScripts.length > 0
     ? snapshot.projectState.configuredScripts.join(", ")
-    : "none";
+    : "없음";
 }
 
 function summarizeSnapshotPatchRisk(snapshot) {
   const preview = snapshot.development?.patchPreview;
   if (!preview) {
-    return "not recorded";
+    return "기록 없음";
   }
   return preview.riskAssessment.separateApprovalRequired
-    ? `${preview.riskAssessment.overallRisk} / separate approval`
+    ? `${preview.riskAssessment.overallRisk} / 별도 승인`
     : preview.riskAssessment.overallRisk;
 }
 
@@ -536,11 +535,11 @@ async function importSnapshotFile(file) {
     const source = await file.text();
     const snapshot = JSON.parse(source);
     if (!isConsoleSnapshot(snapshot)) {
-      throw new Error("Unsupported Dure console data file.");
+      throw new Error("지원하지 않는 Dure console data 파일입니다.");
     }
     applyConsoleSnapshot(snapshot);
   } catch (error) {
-    setText(snapshotFields.status, error instanceof Error ? error.message : "Unable to import snapshot.");
+    setText(snapshotFields.status, error instanceof Error ? error.message : "불러오지 못했습니다.");
   } finally {
     snapshotFile.value = "";
   }
@@ -559,10 +558,29 @@ document.addEventListener("click", (event) => {
   }
 });
 
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    selectAgent("pm");
+document.addEventListener("change", (event) => {
+  if (!Object.values(settingFields).includes(event.target)) {
+    return;
   }
+
+  const settings = agentSettings[selectedAgentId];
+  settings.autospeak = settingFields.autospeak.checked;
+  settings.participation = Number(settingFields.participation.value);
+  settings.tone = settingFields.tone.value;
+  settings.authority = settingFields.authority.value;
+  selectAgent(selectedAgentId);
+});
+
+document.addEventListener("input", (event) => {
+  if (event.target !== settingFields.participation) {
+    return;
+  }
+
+  agentSettings[selectedAgentId].participation = Number(settingFields.participation.value);
+  setText(settingFields.participationValue, `${settingFields.participation.value}%`);
+  renderAgents();
+  renderInspector();
+  renderDialogue();
 });
 
 snapshotFile.addEventListener("change", (event) => {
@@ -573,5 +591,7 @@ snapshotFile.addEventListener("change", (event) => {
 });
 
 renderAgents();
+renderSettings();
 renderInspector();
+renderDialogue();
 renderConversation();
