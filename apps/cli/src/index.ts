@@ -1166,6 +1166,9 @@ function printApply(record: ApplyRecord): void {
 }
 
 function printWorkspaceVerification(record: WorkspaceVerificationRecord): void {
+  const summary = workspaceVerificationSummary(record);
+  const gates = workspaceVerificationGates(record);
+  const outputArtifacts = workspaceVerificationOutputArtifacts(record);
   console.log("Dure Verification");
   console.log("");
   section("Run", [
@@ -1176,12 +1179,40 @@ function printWorkspaceVerification(record: WorkspaceVerificationRecord): void {
     `accepted: ${record.accepted ? "yes" : "no"}`
   ]);
   section("Workspace", [`root: ${record.workspaceRoot}`, `package manager: ${record.packageManager}`]);
+  section("Summary", [
+    `requested scripts: ${formatList(summary.requestedScripts)}`,
+    `configured scripts: ${formatList(summary.configuredScripts)}`,
+    `passed commands: ${summary.passedCommands}`,
+    `failed commands: ${summary.failedCommands}`,
+    `blocked commands: ${summary.blockedCommands}`,
+    `skipped commands: ${summary.skippedCommands}`,
+    `timed out commands: ${summary.timedOutCommands}`,
+    `output artifacts: ${summary.outputArtifacts}`,
+    `redacted artifacts: ${summary.redactedArtifacts}`,
+    `required gates passed: ${summary.requiredGatesPassed ? "yes" : "no"}`,
+    `dependency audit: ${summary.dependencyAudit}`,
+    `failure reasons: ${formatList(summary.failureReasons)}`
+  ]);
   section(
     "Commands",
     record.commands.map((command) => {
       const exit = command.exitCode === undefined ? "exit n/a" : `exit ${command.exitCode}`;
-      return `${command.name}: ${command.status} (${exit}, ${command.durationMs}ms)`;
+      const redaction = command.stdoutRedacted || command.stderrRedacted ? ", redacted" : "";
+      const truncation = command.stdoutTruncated || command.stderrTruncated ? ", truncated" : "";
+      return `${command.name}: ${command.status} (${exit}, ${command.durationMs}ms${redaction}${truncation})`;
     })
+  );
+  section(
+    "Verification Gates",
+    gates.map((gate) => `${gate.status}: ${gate.id} (${gate.required ? "required" : "optional"}) - ${gate.summary}`)
+  );
+  section(
+    "Output Artifacts",
+    outputArtifacts.length > 0
+      ? outputArtifacts.map((artifact) =>
+          `${artifact.command} ${artifact.stream}: ${artifact.path}${artifact.redacted ? ", redacted" : ""}${artifact.truncated ? ", truncated" : ""}`
+        )
+      : ["none"]
   );
   section(
     "Local Checks",
@@ -1434,11 +1465,85 @@ function summarizePreviewVerification(result: VerificationResult | undefined): r
 }
 
 function summarizeWorkspaceVerification(result: WorkspaceVerificationRecord): readonly string[] {
+  const summary = workspaceVerificationSummary(result);
   return [
     `accepted: ${result.accepted ? "yes" : "no"}`,
     `status: ${result.previousStatus} -> ${result.nextStatus}`,
+    `commands: ${summary.passedCommands} passed, ${summary.failedCommands} failed, ${summary.blockedCommands} blocked, ${summary.skippedCommands} skipped`,
+    `gates: ${summary.requiredGatesPassed ? "required gates passed" : "required gates failed"}`,
+    `failure reasons: ${formatList(summary.failureReasons)}`,
     ...result.commands.map((command) => `${command.name}: ${command.status}`)
   ];
+}
+
+function workspaceVerificationSummary(result: WorkspaceVerificationRecord): WorkspaceVerificationRecord["summary"] {
+  return result.summary ?? {
+    requestedScripts: result.commands.map((command) => command.name),
+    configuredScripts: result.commands.filter((command) => command.configured).map((command) => command.name),
+    passedCommands: result.commands.filter((command) => command.status === "passed").length,
+    failedCommands: result.commands.filter((command) => command.status === "failed").length,
+    blockedCommands: result.commands.filter((command) => command.status === "blocked").length,
+    skippedCommands: result.commands.filter((command) => command.status === "not_configured").length,
+    timedOutCommands: result.commands.filter((command) => command.status === "timed_out").length,
+    outputArtifacts: result.commands.filter((command) => command.stdoutPath).length
+      + result.commands.filter((command) => command.stderrPath).length,
+    redactedArtifacts: 0,
+    requiredGatesPassed: result.accepted,
+    dependencyAudit: "placeholder",
+    failureReasons: result.accepted ? [] : ["Workspace verification did not pass."]
+  };
+}
+
+function workspaceVerificationGates(result: WorkspaceVerificationRecord): WorkspaceVerificationRecord["gates"] {
+  return result.gates ?? [
+    ...result.commands.map((command) => ({
+      id: command.name,
+      category: "command" as const,
+      status: command.status === "passed"
+        ? "passed" as const
+        : command.status === "not_configured"
+          ? "skipped" as const
+          : command.status === "blocked" || command.status === "timed_out"
+            ? "blocked" as const
+            : "failed" as const,
+      required: command.configured,
+      summary: `${command.name}: ${command.status}`
+    })),
+    ...result.localChecks.map((check) => ({
+      id: check.name,
+      category: check.mocked ? "placeholder" as const : "local_check" as const,
+      status: check.mocked ? "skipped" as const : check.passed ? "passed" as const : "failed" as const,
+      required: !check.mocked,
+      summary: check.summary
+    }))
+  ];
+}
+
+function workspaceVerificationOutputArtifacts(
+  result: WorkspaceVerificationRecord
+): WorkspaceVerificationRecord["outputArtifacts"] {
+  return result.outputArtifacts ?? result.commands.flatMap((command) => {
+    const artifacts: WorkspaceVerificationRecord["outputArtifacts"][number][] = [];
+    if (command.stdoutPath) {
+      artifacts.push({
+        command: command.name,
+        stream: "stdout",
+        path: command.stdoutPath,
+        redacted: command.stdoutRedacted ?? false,
+        truncated: command.stdoutTruncated ?? false
+      });
+    }
+    if (command.stderrPath) {
+      artifacts.push({
+        command: command.name,
+        stream: "stderr",
+        path: command.stderrPath,
+        redacted: command.stderrRedacted ?? false,
+        truncated: command.stderrTruncated ?? false
+      });
+    }
+    return artifacts;
+  });
 }
 
 function summarizeCheckGroup(checks: readonly VerificationCheck[]): string {

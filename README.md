@@ -129,7 +129,7 @@ corepack pnpm cli -- verify <run-id>
 corepack pnpm cli -- verify <run-id> --script test --timeout-ms 30000
 ```
 
-Verification only runs allow-listed `package.json` scripts: `test`, `lint`, and `typecheck`. It must target the same workspace recorded in `apply.json`, blocks pre/post lifecycle hooks in v0.1, redacts secret-like output, records `workspace-verification.json` plus `verification-output/`, and updates the run to `verified` or `failed`.
+Verification only runs allow-listed `package.json` scripts: `test`, `lint`, and `typecheck`. It must target the same workspace recorded in `apply.json`, blocks pre/post lifecycle hooks in v0.1, redacts secret-like output, records `workspace-verification.json` plus `verification-output/`, stores structured summary/gate/output artifact metadata, and updates the run to `verified` or `failed`.
 
 Record bug bounty scope intake:
 
@@ -326,9 +326,18 @@ Run:
   - previous status: applied
   - new status: verified
 
+Summary:
+  - passed commands: 1
+  - required gates passed: yes
+  - dependency audit: placeholder
+
 Commands:
   - test: passed (exit 0, 320ms)
   - lint: not_configured (exit n/a, 0ms)
+
+Verification Gates:
+  - passed: test (required)
+  - skipped: dependency_audit (optional)
 ```
 
 Bug bounty example:
@@ -400,7 +409,7 @@ examples/                Future example projects
 - Approval records are durable gates for later controlled apply; approval itself does not modify files and expires before stale apply operations.
 - Controlled apply writes only approved patch content into a controlled workspace after preflight checks and records rollback metadata, but rollback execution is not implemented yet.
 - Proposal-time test, lint, and typecheck checks are placeholders.
-- Applied workspace verification can run allow-listed `test`, `lint`, and `typecheck` package scripts only.
+- Applied workspace verification can run allow-listed `test`, `lint`, and `typecheck` package scripts only, with structured gate summaries and redacted output artifact metadata.
 - Dependency audit remains a placeholder and never contacts registries in v0.1.
 - Operations and productivity integrations are declarations only.
 - Patch proposals are structured data and are not automatically applied.

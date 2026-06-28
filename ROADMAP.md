@@ -16,7 +16,7 @@
 - Persistent run preview
 - Approval Gate for patch proposals with risk confirmation, policy checklist, and expiration metadata
 - Controlled apply into a safe workspace with preflight checks and rollback metadata
-- Applied workspace verification with allow-listed package scripts
+- Applied workspace verification with allow-listed package scripts, structured gates, and output artifact summaries
 - Minimal bug bounty scope intake persistence
 - Bug bounty evidence ledger persistence with redaction
 - Bug bounty report draft markdown export

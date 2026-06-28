@@ -406,6 +406,41 @@ export type WorkspaceVerificationCommandStatus =
   | "timed_out"
   | "blocked";
 
+export type WorkspaceVerificationGateStatus = "passed" | "failed" | "blocked" | "skipped";
+
+export type WorkspaceVerificationGateCategory = "command" | "local_check" | "placeholder";
+
+export interface WorkspaceVerificationGateResult {
+  readonly id: string;
+  readonly category: WorkspaceVerificationGateCategory;
+  readonly status: WorkspaceVerificationGateStatus;
+  readonly required: boolean;
+  readonly summary: string;
+}
+
+export interface WorkspaceVerificationOutputArtifact {
+  readonly command: WorkspaceVerificationScriptName;
+  readonly stream: "stdout" | "stderr";
+  readonly path: string;
+  readonly redacted: boolean;
+  readonly truncated: boolean;
+}
+
+export interface WorkspaceVerificationSummary {
+  readonly requestedScripts: readonly WorkspaceVerificationScriptName[];
+  readonly configuredScripts: readonly WorkspaceVerificationScriptName[];
+  readonly passedCommands: number;
+  readonly failedCommands: number;
+  readonly blockedCommands: number;
+  readonly skippedCommands: number;
+  readonly timedOutCommands: number;
+  readonly outputArtifacts: number;
+  readonly redactedArtifacts: number;
+  readonly requiredGatesPassed: boolean;
+  readonly dependencyAudit: "placeholder";
+  readonly failureReasons: readonly string[];
+}
+
 export interface WorkspaceVerificationCommandResult {
   readonly name: WorkspaceVerificationScriptName;
   readonly status: WorkspaceVerificationCommandStatus;
@@ -419,6 +454,10 @@ export interface WorkspaceVerificationCommandResult {
   readonly stderrPath?: string;
   readonly stdoutPreview: string;
   readonly stderrPreview: string;
+  readonly stdoutRedacted: boolean;
+  readonly stderrRedacted: boolean;
+  readonly stdoutTruncated: boolean;
+  readonly stderrTruncated: boolean;
   readonly notes: readonly string[];
 }
 
@@ -434,6 +473,9 @@ export interface WorkspaceVerificationRecord {
   readonly nextStatus: "verified" | "failed";
   readonly commands: readonly WorkspaceVerificationCommandResult[];
   readonly localChecks: readonly VerificationCheck[];
+  readonly gates: readonly WorkspaceVerificationGateResult[];
+  readonly summary: WorkspaceVerificationSummary;
+  readonly outputArtifacts: readonly WorkspaceVerificationOutputArtifact[];
   readonly nextRecommendedAction: string;
 }
 

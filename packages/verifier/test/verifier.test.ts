@@ -43,9 +43,15 @@ test("workspace verifier runs allow-listed configured scripts", async () => {
   });
 
   assert.equal(record.accepted, true);
+  assert.equal(record.summary.passedCommands, 3);
+  assert.equal(record.summary.requiredGatesPassed, true);
+  assert.equal(record.summary.outputArtifacts, 6);
+  assert.equal(record.summary.dependencyAudit, "placeholder");
+  assert.ok(record.gates.some((gate) => gate.id === "dependency_audit" && gate.status === "skipped"));
   assert.deepEqual(record.commands.map((command) => command.status), ["passed", "passed", "passed"]);
   assert.ok(record.commands.every((command) => command.command.join(" ") === `pnpm run ${command.name}`));
   assert.ok(record.commands.every((command) => command.stdoutPath && existsSync(command.stdoutPath)));
+  assert.ok(record.outputArtifacts.every((artifact) => existsSync(artifact.path)));
 });
 
 test("workspace verifier allows missing lint and typecheck scripts when one check passes", async () => {
@@ -67,6 +73,8 @@ test("workspace verifier allows missing lint and typecheck scripts when one chec
   assert.equal(record.commands.find((command) => command.name === "test")?.status, "passed");
   assert.equal(record.commands.find((command) => command.name === "lint")?.status, "not_configured");
   assert.equal(record.commands.find((command) => command.name === "typecheck")?.status, "not_configured");
+  assert.equal(record.summary.skippedCommands, 2);
+  assert.equal(record.summary.requiredGatesPassed, true);
 });
 
 test("workspace verifier fails failed scripts and blocks lifecycle hooks", async () => {
@@ -99,8 +107,13 @@ test("workspace verifier fails failed scripts and blocks lifecycle hooks", async
 
   assert.equal(failed.accepted, false);
   assert.equal(failed.commands[0].status, "failed");
+  assert.equal(failed.summary.failedCommands, 1);
+  assert.equal(failed.summary.requiredGatesPassed, false);
+  assert.ok(failed.summary.failureReasons.some((reason) => reason.includes("test")));
   assert.equal(blocked.accepted, false);
   assert.equal(blocked.commands[0].status, "blocked");
+  assert.equal(blocked.summary.blockedCommands, 1);
+  assert.ok(blocked.gates.some((gate) => gate.status === "blocked" && gate.required));
   assert.match(blocked.commands[0].notes.join("\n"), /Lifecycle hooks are blocked/);
 });
 
@@ -119,6 +132,8 @@ test("workspace verifier records missing package.json as a failed policy result"
   assert.equal(record.accepted, false);
   assert.equal(record.commands[0].status, "blocked");
   assert.equal(record.localChecks.find((check) => check.name === "security_scan")?.passed, false);
+  assert.equal(record.summary.blockedCommands, 1);
+  assert.match(record.summary.failureReasons.join("\n"), /Missing package\.json/);
 });
 
 test("workspace verifier redacts secret-like command output", async () => {
@@ -138,6 +153,9 @@ test("workspace verifier redacts secret-like command output", async () => {
   const stdoutPath = record.commands[0].stdoutPath;
 
   assert.equal(record.accepted, false);
+  assert.equal(record.commands[0].stdoutRedacted, true);
+  assert.equal(record.outputArtifacts.find((artifact) => artifact.stream === "stdout")?.redacted, true);
+  assert.equal(record.summary.redactedArtifacts, 1);
   assert.ok(stdoutPath);
   assert.match(await readFile(stdoutPath, "utf8"), /\[redacted-secret\]/);
   assert.doesNotMatch(await readFile(stdoutPath, "utf8"), /supersecretvalue123/);

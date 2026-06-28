@@ -338,8 +338,13 @@ test("run store verifies an applied workspace with allow-listed scripts", async 
 
   assert.equal(verification.accepted, true);
   assert.equal(verification.nextStatus, "verified");
+  assert.equal(verification.summary.passedCommands, 1);
+  assert.equal(verification.summary.requiredGatesPassed, true);
+  assert.equal(verification.gates.find((gate) => gate.id === "test")?.status, "passed");
+  assert.equal(verification.outputArtifacts.length, 2);
   assert.equal(preview.metadata.status, "verified");
   assert.equal(preview.workspaceVerificationRecord?.accepted, true);
+  assert.equal(preview.workspaceVerificationRecord?.summary.passedCommands, 1);
   assert.ok(preview.artifactPaths.workspaceVerification);
   assert.ok(existsSync(preview.artifactPaths.workspaceVerification));
   assert.equal(preview.decisionLog.entries.at(-1)?.type, "workspace_verification_result");
@@ -369,6 +374,9 @@ test("run store marks failed workspace verification as failed", async () => {
 
   assert.equal(verification.accepted, false);
   assert.equal(verification.commands[0].status, "failed");
+  assert.equal(verification.summary.failedCommands, 1);
+  assert.equal(verification.summary.requiredGatesPassed, false);
+  assert.ok(verification.summary.failureReasons.length > 0);
   assert.equal(preview.metadata.status, "failed");
   assert.throws(() => store.verifyRun(record.id), /current status is failed/);
 });
@@ -423,6 +431,8 @@ test("run store records missing package.json verification as failed", async () =
 
   assert.equal(verification.accepted, false);
   assert.equal(verification.commands[0].status, "blocked");
+  assert.equal(verification.summary.blockedCommands, 1);
+  assert.match(verification.summary.failureReasons.join("\n"), /Missing package\.json/);
   assert.match(verification.commands[0].notes.join("\n"), /Missing package\.json/);
   assert.equal(store.loadPreview(record.id).metadata.status, "failed");
 });

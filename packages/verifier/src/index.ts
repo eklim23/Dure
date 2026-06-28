@@ -7,6 +7,8 @@ import type {
   VerificationCheck,
   VerificationResult,
   WorkspaceVerificationCommandResult,
+  WorkspaceVerificationGateResult,
+  WorkspaceVerificationOutputArtifact,
   WorkspaceVerificationRecord,
   WorkspaceVerificationScriptName
 } from "@dure/core";
@@ -124,6 +126,7 @@ interface PackageScriptReadResult {
 interface CapturedOutput {
   readonly value: string;
   readonly redacted: boolean;
+  readonly truncated: boolean;
 }
 
 export class WorkspaceVerifier {
@@ -151,10 +154,10 @@ export class WorkspaceVerifier {
     const policyFailures = internalCommands.flatMap((command) => command.policyFailures);
     const localChecks = this.localChecks(internalCommands, policyFailures);
     const hasPassedCommand = commands.some((command) => command.status === "passed");
-    const hasCommandFailure = commands.some((command) =>
-      command.status === "failed" || command.status === "timed_out" || command.status === "blocked"
-    );
-    const accepted = hasPassedCommand && !hasCommandFailure && localChecks.every((check) => check.passed);
+    const gates = buildVerificationGates(commands, localChecks);
+    const outputArtifacts = buildOutputArtifacts(commands);
+    const summary = buildVerificationSummary(scriptNames, commands, gates, outputArtifacts);
+    const accepted = hasPassedCommand && summary.requiredGatesPassed;
     const completedAt = new Date().toISOString();
 
     return {
@@ -169,9 +172,12 @@ export class WorkspaceVerifier {
       nextStatus: accepted ? "verified" : "failed",
       commands,
       localChecks,
+      gates,
+      summary,
+      outputArtifacts,
       nextRecommendedAction: accepted
         ? "This run is verified. Review artifacts before release or expansion."
-        : "Inspect workspace verification artifacts and produce a revised patch proposal."
+        : `Inspect workspace verification artifacts and address: ${summary.failureReasons.join("; ")}`
     };
   }
 
@@ -213,6 +219,10 @@ export class WorkspaceVerifier {
           durationMs: 0,
           stdoutPreview: "",
           stderrPreview: "",
+          stdoutRedacted: false,
+          stderrRedacted: false,
+          stdoutTruncated: false,
+          stderrTruncated: false,
           notes: ["No package.json script is configured for this check."]
         },
         secretDetected: false,
@@ -259,6 +269,10 @@ export class WorkspaceVerifier {
         stderrPath,
         stdoutPreview: stdout.value,
         stderrPreview: stderr.value,
+        stdoutRedacted: stdout.redacted,
+        stderrRedacted: stderr.redacted,
+        stdoutTruncated: stdout.truncated,
+        stderrTruncated: stderr.truncated,
         notes: [
           `Timeout: ${input.timeoutMs}ms.`,
           ...errorNote
@@ -308,6 +322,113 @@ export class WorkspaceVerifier {
       }
     ];
   }
+}
+
+function buildVerificationGates(
+  commands: readonly WorkspaceVerificationCommandResult[],
+  localChecks: readonly VerificationCheck[]
+): readonly WorkspaceVerificationGateResult[] {
+  const commandGates = commands.map((command): WorkspaceVerificationGateResult => ({
+    id: command.name,
+    category: "command",
+    status: commandGateStatus(command.status),
+    required: command.status !== "not_configured",
+    summary: commandGateSummary(command)
+  }));
+  const localGates = localChecks.map((check): WorkspaceVerificationGateResult => ({
+    id: check.name,
+    category: check.mocked ? "placeholder" : "local_check",
+    status: check.mocked ? "skipped" : check.passed ? "passed" : "failed",
+    required: !check.mocked,
+    summary: check.summary
+  }));
+
+  return [...commandGates, ...localGates];
+}
+
+function commandGateStatus(status: WorkspaceVerificationCommandResult["status"]): WorkspaceVerificationGateResult["status"] {
+  if (status === "passed") {
+    return "passed";
+  }
+  if (status === "not_configured") {
+    return "skipped";
+  }
+  if (status === "blocked" || status === "timed_out") {
+    return "blocked";
+  }
+  return "failed";
+}
+
+function commandGateSummary(command: WorkspaceVerificationCommandResult): string {
+  if (command.status === "not_configured") {
+    return `${command.name} script is not configured and was skipped.`;
+  }
+  if (command.status === "passed") {
+    return `${command.name} script passed.`;
+  }
+  if (command.status === "failed") {
+    return `${command.name} script failed.`;
+  }
+  if (command.status === "timed_out") {
+    return `${command.name} script timed out.`;
+  }
+  return command.notes[0] ?? `${command.name} script ${command.status}.`;
+}
+
+function buildOutputArtifacts(
+  commands: readonly WorkspaceVerificationCommandResult[]
+): readonly WorkspaceVerificationOutputArtifact[] {
+  return commands.flatMap((command) => {
+    const artifacts: WorkspaceVerificationOutputArtifact[] = [];
+    if (command.stdoutPath) {
+      artifacts.push({
+        command: command.name,
+        stream: "stdout",
+        path: command.stdoutPath,
+        redacted: command.stdoutRedacted,
+        truncated: command.stdoutTruncated
+      });
+    }
+    if (command.stderrPath) {
+      artifacts.push({
+        command: command.name,
+        stream: "stderr",
+        path: command.stderrPath,
+        redacted: command.stderrRedacted,
+        truncated: command.stderrTruncated
+      });
+    }
+    return artifacts;
+  });
+}
+
+function buildVerificationSummary(
+  requestedScripts: readonly WorkspaceVerificationScriptName[],
+  commands: readonly WorkspaceVerificationCommandResult[],
+  gates: readonly WorkspaceVerificationGateResult[],
+  outputArtifacts: readonly WorkspaceVerificationOutputArtifact[]
+): WorkspaceVerificationRecord["summary"] {
+  const requiredFailures = gates.filter((gate) => gate.required && gate.status !== "passed");
+  const hasPassedCommand = commands.some((command) => command.status === "passed");
+  const failureReasons = [
+    ...(!hasPassedCommand ? ["At least one configured verification script must pass."] : []),
+    ...requiredFailures.map((gate) => gate.summary)
+  ];
+
+  return {
+    requestedScripts,
+    configuredScripts: commands.filter((command) => command.configured).map((command) => command.name),
+    passedCommands: commands.filter((command) => command.status === "passed").length,
+    failedCommands: commands.filter((command) => command.status === "failed").length,
+    blockedCommands: commands.filter((command) => command.status === "blocked").length,
+    skippedCommands: commands.filter((command) => command.status === "not_configured").length,
+    timedOutCommands: commands.filter((command) => command.status === "timed_out").length,
+    outputArtifacts: outputArtifacts.length,
+    redactedArtifacts: outputArtifacts.filter((artifact) => artifact.redacted).length,
+    requiredGatesPassed: requiredFailures.length === 0,
+    dependencyAudit: "placeholder",
+    failureReasons: [...new Set(failureReasons)]
+  };
 }
 
 function normalizeScripts(
@@ -380,6 +501,10 @@ function blockedCommand(
     durationMs: 0,
     stdoutPreview: "",
     stderrPreview: "",
+    stdoutRedacted: false,
+    stderrRedacted: false,
+    stdoutTruncated: false,
+    stderrTruncated: false,
     notes: [message]
   };
 }
@@ -440,12 +565,14 @@ function isSecretEnvName(name: string): boolean {
 function captureOutput(value: string): CapturedOutput {
   const redacted = redactSecrets(value);
   const secretRedacted = redacted !== value;
-  const limited = redacted.length > OUTPUT_LIMIT
+  const truncated = redacted.length > OUTPUT_LIMIT;
+  const limited = truncated
     ? `${redacted.slice(0, OUTPUT_LIMIT)}\n[truncated ${redacted.length - OUTPUT_LIMIT} chars]`
     : redacted;
   return {
     value: limited,
-    redacted: secretRedacted
+    redacted: secretRedacted,
+    truncated
   };
 }
 

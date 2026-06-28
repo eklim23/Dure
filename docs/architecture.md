@@ -94,7 +94,7 @@ User Natural Language Input
 
 10. Verification / Safety Gate
 
-   `packages/verifier` handles proposal-time patch verification and applied-workspace verification. Proposal-time test, lint, typecheck, and dependency audit checks remain conservative placeholders. Applied-workspace verification may run only `test`, `lint`, and `typecheck` scripts from `package.json`, blocks pre/post lifecycle hooks in v0.1, captures redacted output, and updates the run to `verified` or `failed`.
+   `packages/verifier` handles proposal-time patch verification and applied-workspace verification. Proposal-time test, lint, typecheck, and dependency audit checks remain conservative placeholders. Applied-workspace verification may run only `test`, `lint`, and `typecheck` scripts from `package.json`, blocks pre/post lifecycle hooks in v0.1, captures redacted output, records structured gate results, summarizes failure reasons, tracks output artifacts, and updates the run to `verified` or `failed`.
 
 11. Safety Policy
 

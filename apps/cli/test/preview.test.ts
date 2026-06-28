@@ -201,10 +201,16 @@ test("verify command runs applied workspace scripts and updates preview status",
   assert.equal(verification.status, 0, verification.stderr);
   assert.match(verification.stdout, /Dure Verification/);
   assert.match(verification.stdout, /new status: verified/);
+  assert.match(verification.stdout, /Summary/);
+  assert.match(verification.stdout, /passed commands: 1/);
+  assert.match(verification.stdout, /required gates passed: yes/);
+  assert.match(verification.stdout, /Verification Gates/);
+  assert.match(verification.stdout, /Output Artifacts/);
   assert.match(verification.stdout, /test: passed/);
   assert.equal(preview.status, 0, preview.stderr);
   assert.match(preview.stdout, /run status: verified/);
   assert.match(preview.stdout, /Workspace Verification/);
+  assert.match(preview.stdout, /commands: 1 passed, 0 failed, 0 blocked/);
 });
 
 test("verify command returns non-zero when an applied script fails", async () => {
@@ -219,6 +225,8 @@ test("verify command returns non-zero when an applied script fails", async () =>
 
   assert.notEqual(verification.status, 0);
   assert.match(verification.stdout, /new status: failed/);
+  assert.match(verification.stdout, /required gates passed: no/);
+  assert.match(verification.stdout, /failure reasons:/);
   assert.match(verification.stdout, /test: failed/);
   assert.equal(preview.status, 0, preview.stderr);
   assert.match(preview.stdout, /run status: failed/);

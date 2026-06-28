@@ -646,19 +646,32 @@ export class RunStore {
         accepted: record.accepted,
         previousStatus: record.previousStatus,
         nextStatus: record.nextStatus,
+        summary: record.summary,
+        gates: record.gates.map((gate) => ({
+          id: gate.id,
+          category: gate.category,
+          status: gate.status,
+          required: gate.required,
+          summary: gate.summary
+        })),
         commands: record.commands.map((command) => ({
           name: command.name,
           status: command.status,
           configured: command.configured,
           exitCode: command.exitCode,
-          durationMs: command.durationMs
+          durationMs: command.durationMs,
+          stdoutRedacted: command.stdoutRedacted,
+          stderrRedacted: command.stderrRedacted,
+          stdoutTruncated: command.stdoutTruncated,
+          stderrTruncated: command.stderrTruncated
         })),
         localChecks: record.localChecks.map((check) => ({
           name: check.name,
           passed: check.passed,
           mocked: check.mocked,
           summary: check.summary
-        }))
+        })),
+        outputArtifacts: record.outputArtifacts
       },
       timestamp: record.completedAt
     } satisfies DecisionLogEntry);

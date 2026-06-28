@@ -51,7 +51,7 @@ Dure assumes autonomous coding systems can create real security, stability, and 
 - Verification must pass before a patch is accepted.
 - Proposed paths must be relative and traversal-free.
 - Secret scanning checks patch content with local patterns.
-- Test, lint, typecheck, and dependency audit commands are placeholders unless they pass through the approval-controlled workspace verification path.
+- Test, lint, typecheck, and dependency audit commands are placeholders unless they pass through the approval-controlled workspace verification path. Workspace verification records structured gates, failure reasons, and redacted output artifact metadata.
 - Untrusted skills cannot be loaded automatically.
 - Bug Bounty Mode produces passive plans only until scope and authorization are confirmed.
 - Bug bounty evidence must avoid real user data and redact sensitive artifacts.
