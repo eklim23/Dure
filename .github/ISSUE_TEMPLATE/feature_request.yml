@@ -1,20 +1,25 @@
 name: Feature request
-description: Suggest a focused improvement for Dure.
+description: Dure에 작고 검증 가능한 개선을 제안합니다.
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Dure는 작은 MVP 단계, auditability, approval gate, conservative automation을 우선합니다.
+        제안은 가능한 한 하나의 검증 가능한 산출물로 쪼개 주세요.
   - type: textarea
     id: problem
     attributes:
       label: Problem
-      description: What user problem would this solve?
+      description: 어떤 사용자 문제를 해결하나요?
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
       label: Proposal
-      description: Describe the smallest useful version of the feature.
+      description: 이 기능의 가장 작은 유용한 버전을 설명해 주세요.
     validations:
       required: true
   - type: dropdown
@@ -27,12 +32,28 @@ body:
         - Safety Policy
         - Memory / Decision Log
         - CLI UX
+        - UI Prototype
+        - Open Source Docs
         - Documentation
         - Other
     validations:
       required: true
   - type: textarea
+    id: mvp_step
+    attributes:
+      label: MVP step
+      description: 이 제안을 더 작게 나눈다면 첫 번째 검증 가능한 단계는 무엇인가요?
+      placeholder: |
+        1. Persist ...
+        2. Add CLI preview ...
+        3. Add tests ...
+  - type: textarea
     id: safety
     attributes:
       label: Safety and auditability notes
-      description: Does this affect approvals, external tools, run artifacts, secrets, or bug bounty scope?
+      description: approval, external tools, run artifacts, secrets, bug bounty scope, redaction에 영향을 주나요?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: 고려했지만 제외한 접근이 있다면 적어 주세요.

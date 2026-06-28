@@ -1,24 +1,27 @@
 name: Bug report
-description: Report a reproducible problem in Dure.
+description: Dure에서 재현 가능한 문제를 제보합니다.
 title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping improve Dure. Do not include secrets, tokens, cookies, private reports, or live target data.
+        Dure 개선을 도와주셔서 감사합니다.
+
+        공개 issue에는 secrets, tokens, cookies, private reports, live target data, 개인정보를 포함하지 마세요.
+        보안 취약점 또는 민감한 내용은 GitHub Security Advisory를 사용해 주세요.
   - type: textarea
     id: summary
     attributes:
       label: Summary
-      description: What went wrong?
+      description: 어떤 문제가 발생했나요?
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
       label: Reproduction steps
-      description: List the smallest steps that reproduce the issue.
+      description: 문제를 재현하는 가장 작은 단계를 적어 주세요.
       placeholder: |
         1. Run ...
         2. Observe ...
@@ -28,12 +31,31 @@ body:
     id: expected
     attributes:
       label: Expected behavior
+      description: 기대한 동작을 적어 주세요.
     validations:
       required: true
   - type: textarea
     id: actual
     attributes:
       label: Actual behavior
+      description: 실제 동작을 적어 주세요.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: 문제가 발생한 영역을 골라 주세요.
+      options:
+        - CLI
+        - Development Mode
+        - Bug Bounty Mode
+        - Safety Policy / Approval Gate
+        - Memory / Decision Log
+        - Skill Registry
+        - UI Prototype
+        - Documentation
+        - Unsure
     validations:
       required: true
   - type: input
@@ -41,8 +63,18 @@ body:
     attributes:
       label: Version or commit
       placeholder: "v0.1.0 or commit SHA"
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification tried
+      description: 실행한 검증 명령과 결과를 적어 주세요.
+      placeholder: |
+        corepack pnpm test
+        corepack pnpm cli -- ...
   - type: textarea
     id: context
     attributes:
       label: Additional context
-      description: Redacted logs, CLI output, or screenshots.
+      description: Redacted logs, CLI output, screenshots, run id 등 공개 가능한 정보만 적어 주세요.

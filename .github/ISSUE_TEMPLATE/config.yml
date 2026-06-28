@@ -2,4 +2,7 @@ blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability
     url: https://github.com/eklim23/Dure/security/advisories/new
-    about: Please use a private advisory for vulnerabilities or sensitive security reports.
+    about: 보안 취약점이나 민감한 보안 제보는 private advisory를 사용해 주세요.
+  - name: Dure documentation
+    url: https://github.com/eklim23/Dure#readme
+    about: 사용법, 모드, 안전 모델은 README와 docs를 먼저 확인해 주세요.
