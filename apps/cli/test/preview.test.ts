@@ -72,6 +72,36 @@ test("runs, show, and export commands inspect persisted runs", async () => {
   assert.match(await readFile(exportPath, "utf8"), /## Decision Log/);
 });
 
+test("console-data command prints and writes a read-only UI snapshot", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-console-data-"));
+  const record = persistRun(tempRoot, patchProposalFixture(), "development");
+  const outputPath = path.join(tempRoot, "console-data.json");
+
+  const printed = runCli(tempRoot, ["console-data", record.id]);
+  const written = runCli(tempRoot, ["console-data", record.id, "--output", outputPath]);
+  const printedSnapshot = JSON.parse(printed.stdout) as {
+    source: { kind: string; readOnly: boolean; redacted: boolean };
+    run: { id: string; selectedMode: string; proposalKind: string };
+    decisions: unknown[];
+  };
+  const writtenSnapshot = JSON.parse(await readFile(outputPath, "utf8")) as {
+    source: { kind: string; readOnly: boolean; redacted: boolean };
+    run: { id: string };
+  };
+
+  assert.equal(printed.status, 0, printed.stderr);
+  assert.equal(printedSnapshot.source.kind, "dure-console-data");
+  assert.equal(printedSnapshot.source.readOnly, true);
+  assert.equal(printedSnapshot.source.redacted, true);
+  assert.equal(printedSnapshot.run.id, record.id);
+  assert.equal(printedSnapshot.run.selectedMode, "development");
+  assert.equal(printedSnapshot.run.proposalKind, "patch");
+  assert.equal(printedSnapshot.decisions.length, 2);
+  assert.equal(written.status, 0, written.stderr);
+  assert.match(written.stdout, /Dure Console Data/);
+  assert.equal(writtenSnapshot.run.id, record.id);
+});
+
 test("approve command records approval and updates preview status", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-approve-"));
   const record = persistRun(tempRoot, patchProposalFixture(), "development");

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { AssistantCore } from "@dure/assistant-core";
 import type {
@@ -16,6 +16,7 @@ import type {
   BugBountySeverity,
   BugBountyScopeIntake,
   BugBountyScopeRecord,
+  ConsoleRunSnapshot,
   PatchProposal,
   RunExportRecord,
   RunListItem,
@@ -57,6 +58,15 @@ try {
     }
     const record = new RunStore().exportRun(parsed.runId);
     printRunExport(record);
+    process.exit(0);
+  }
+
+  if (parsed.command === "console-data") {
+    if (!parsed.runId) {
+      throw new Error("console-data requires a run id.");
+    }
+    const snapshot = new RunStore().createConsoleSnapshot(parsed.runId);
+    printConsoleData(snapshot, parsed.consoleDataOutput);
     process.exit(0);
   }
 
@@ -173,6 +183,7 @@ interface ParsedArgs {
     | "runs"
     | "show"
     | "export"
+    | "console-data"
     | "preview"
     | "approve"
     | "reject"
@@ -186,6 +197,7 @@ interface ParsedArgs {
   readonly runId?: string;
   readonly limit?: number;
   readonly reason?: string;
+  readonly consoleDataOutput?: string;
   readonly workspaceRoot?: string;
   readonly verificationScripts?: readonly WorkspaceVerificationScriptName[];
   readonly timeoutMs?: number;
@@ -245,6 +257,11 @@ function parseArgs(tokens: readonly string[]): ParsedArgs {
       throw new Error(`${commandOrRequest} requires exactly one run id.`);
     }
     return { command: commandOrRequest, runId: rest[0], persist };
+  }
+
+  if (commandOrRequest === "console-data") {
+    rejectRunCommandGlobalOptions("console-data", modeOverride, persist);
+    return parseConsoleDataCommand(rest, persist);
   }
 
   if (commandOrRequest === "approve" || commandOrRequest === "reject") {
@@ -320,6 +337,21 @@ function parseApprovalCommand(command: "approve" | "reject", tokens: readonly st
     command,
     runId,
     reason: firstOption(options, "reason"),
+    persist
+  };
+}
+
+function parseConsoleDataCommand(tokens: readonly string[], persist: boolean): ParsedArgs {
+  const [runId, ...rest] = tokens;
+  if (!runId || runId.trim().length === 0) {
+    throw new Error("console-data requires exactly one run id.");
+  }
+
+  const options = parseCommandOptions(rest, ["output"]);
+  return {
+    command: "console-data",
+    runId,
+    consoleDataOutput: firstOption(options, "output"),
     persist
   };
 }
@@ -711,6 +743,7 @@ function printUsage(): void {
   console.log("  dure runs --limit 10");
   console.log("  dure show <run-id>");
   console.log("  dure export <run-id>");
+  console.log("  dure console-data <run-id> --output .dure/runs/<run-id>/console-data.json");
   console.log("  dure preview <run-id>");
   console.log('  dure approve <run-id> --reason "Reviewed the patch proposal"');
   console.log('  dure reject <run-id> --reason "Scope is unclear"');
@@ -811,6 +844,29 @@ function printRunExport(record: RunExportRecord): void {
   section("Artifact", [`path: ${record.outputPath}`]);
   section("Summary", [record.summary]);
   section("Next", [record.nextRecommendedAction]);
+}
+
+function printConsoleData(snapshot: ConsoleRunSnapshot, outputPath?: string): void {
+  const content = `${JSON.stringify(snapshot, null, 2)}\n`;
+  if (!outputPath) {
+    process.stdout.write(content);
+    return;
+  }
+
+  const resolvedOutputPath = path.resolve(outputPath);
+  mkdirSync(path.dirname(resolvedOutputPath), { recursive: true });
+  writeFileSync(resolvedOutputPath, content, "utf8");
+
+  console.log("Dure Console Data");
+  console.log("");
+  section("Snapshot", [
+    `run: ${snapshot.run.id}`,
+    `mode: ${snapshot.run.selectedMode}`,
+    `output: ${resolvedOutputPath}`,
+    `read-only: ${snapshot.source.readOnly ? "yes" : "no"}`,
+    `redacted: ${snapshot.source.redacted ? "yes" : "no"}`
+  ]);
+  section("Next", ["Open apps/ui/index.html and import this JSON file from the Run Snapshot panel."]);
 }
 
 function printRunPreview(preview: RunPreview): void {

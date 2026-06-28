@@ -48,6 +48,37 @@
         </div>
       </section>
 
+      <section class="snapshot-panel" aria-label="Run snapshot import">
+        <div class="snapshot-heading">
+          <div>
+            <p class="eyebrow">Run Snapshot</p>
+            <h2>Console Data Preview</h2>
+          </div>
+          <label class="file-button" for="snapshot-file">
+            Import JSON
+            <input id="snapshot-file" type="file" accept="application/json,.json">
+          </label>
+        </div>
+        <div class="snapshot-grid" id="snapshot-grid" aria-live="polite">
+          <div>
+            <span class="strip-label">Run</span>
+            <strong id="snapshot-run">not loaded</strong>
+          </div>
+          <div>
+            <span class="strip-label">Status</span>
+            <strong id="snapshot-status">waiting</strong>
+          </div>
+          <div>
+            <span class="strip-label">Proposal</span>
+            <strong id="snapshot-proposal">not loaded</strong>
+          </div>
+          <div>
+            <span class="strip-label">Decisions</span>
+            <strong id="snapshot-decisions">0</strong>
+          </div>
+        </div>
+      </section>
+
       <div class="workspace">
         <aside class="agent-roster" aria-label="Agent roster">
           <div class="panel-heading">

@@ -15,6 +15,7 @@ test("static prototype exposes the required UI anchors", async () => {
   assert.match(html, /data-mode="development"/);
   assert.match(html, /data-mode-choice="development"/);
   assert.match(html, /data-mode-choice="bug-bounty"/);
+  assert.match(html, /id="snapshot-file"/);
   assert.match(html, /simulated transcript/);
   assert.match(html, /Read-only simulation/);
 });
@@ -36,7 +37,10 @@ test("prototype logic remains local and read-only", async () => {
   assert.match(js, /const conversations = \[/);
   assert.match(js, /function renderAgents/);
   assert.match(js, /function selectAgent/);
+  assert.match(js, /function applyConsoleSnapshot/);
+  assert.match(js, /value\.source\?\.kind === "dure-console-data"/);
   assert.doesNotMatch(js, /\bfetch\s*\(/);
   assert.doesNotMatch(js, /XMLHttpRequest/);
   assert.doesNotMatch(js, /localStorage/);
+  assert.doesNotMatch(js, /\.innerHTML\s*=/);
 });

@@ -24,6 +24,7 @@
 - CLI run listing, mode-neutral show, and redacted Markdown export
 - Open-source baseline: CI, issue/PR templates, license, demo transcript, release checklist, and architecture diagram
 - Read-only Dure Console static UI prototype for agent activity visualization
+- Redacted console-data JSON export and UI import for persisted run inspection
 
 ## v0.2
 
@@ -35,7 +36,7 @@
 - Security checklist engine
 - Configurable policy defaults
 - Verification UX polish and richer summaries
-- Connect the Dure Console prototype to persisted run inspection data
+- Dure Console run comparison, filtering, and richer artifact navigation
 
 ## v0.3
 

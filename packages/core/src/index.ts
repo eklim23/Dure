@@ -616,6 +616,102 @@ export interface RunExportRecord {
   readonly nextRecommendedAction: string;
 }
 
+export interface ConsoleRunSnapshot {
+  readonly version: "0.1.0";
+  readonly generatedAt: string;
+  readonly source: {
+    readonly kind: "dure-console-data";
+    readonly readOnly: true;
+    readonly redacted: true;
+  };
+  readonly run: {
+    readonly id: string;
+    readonly status: RunStatus;
+    readonly selectedMode: TaskMode;
+    readonly proposalKind: ProposalKind;
+    readonly proposalId: string;
+    readonly createdAt: string;
+    readonly updatedAt: string;
+    readonly input: string;
+    readonly requiresApproval: boolean;
+    readonly nextRecommendedAction: string;
+  };
+  readonly routing: {
+    readonly inferredIntent: string;
+    readonly confidenceScore: number;
+    readonly assumptions: readonly string[];
+    readonly requiredCapabilities: readonly Capability[];
+    readonly safetyRequirements: readonly string[];
+    readonly requiresUserApproval: boolean;
+    readonly requiresExternalTools: boolean;
+    readonly rejectedModes: readonly TaskMode[];
+  };
+  readonly agents: readonly {
+    readonly name: AssistantAgentRole;
+    readonly status: "active" | "reviewing" | "guarding";
+    readonly summary: string;
+  }[];
+  readonly proposal: {
+    readonly id: string;
+    readonly kind: ProposalKind;
+    readonly summary: string;
+    readonly riskLevel: RiskLevel;
+    readonly requiresApproval: boolean;
+    readonly assumptions: readonly string[];
+    readonly nextActions: readonly string[];
+  };
+  readonly safety: {
+    readonly allowed: boolean;
+    readonly requiresApproval: boolean;
+    readonly externalToolsRequired: boolean;
+    readonly summary: string;
+    readonly blockedCapabilities: readonly Capability[];
+    readonly details: readonly string[];
+  };
+  readonly verification: {
+    readonly proposalAccepted?: boolean;
+    readonly workspaceAccepted?: boolean;
+    readonly checks: readonly {
+      readonly name: string;
+      readonly status: string;
+      readonly mocked?: boolean;
+      readonly summary: string;
+    }[];
+  };
+  readonly development?: {
+    readonly stage?: string;
+    readonly patchChanges: readonly {
+      readonly path: string;
+      readonly operation: PatchOperation;
+      readonly rationale: string;
+    }[];
+    readonly approval?: ApprovalDecision;
+    readonly appliedFiles: number;
+  };
+  readonly bugBounty?: {
+    readonly target?: string;
+    readonly scopeStatus?: BugBountyScopeStatus;
+    readonly safetyLevel?: MoochackerSafetyLevel;
+    readonly evidenceLeads: number;
+    readonly reportDrafts: number;
+    readonly stopConditions: readonly string[];
+  };
+  readonly artifacts: {
+    readonly hasApproval: boolean;
+    readonly hasApply: boolean;
+    readonly hasWorkspaceVerification: boolean;
+    readonly hasScope: boolean;
+    readonly hasEvidenceLedger: boolean;
+    readonly hasReports: boolean;
+    readonly hasMarkdownExport: boolean;
+  };
+  readonly decisions: readonly {
+    readonly type: DecisionLogEntryType;
+    readonly message: string;
+    readonly timestamp: string;
+  }[];
+}
+
 export interface RunPreview {
   readonly metadata: RunMetadata;
   readonly request: {

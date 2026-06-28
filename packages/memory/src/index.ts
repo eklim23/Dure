@@ -25,6 +25,7 @@ import type {
   BugBountySeverity,
   BugBountyScopeIntake,
   BugBountyScopeRecord,
+  ConsoleRunSnapshot,
   DecisionLog,
   DecisionLogEntry,
   DecisionLogEntryType,
@@ -115,6 +116,10 @@ export interface ListRunsInput {
 }
 
 export interface ExportRunInput {
+  readonly now?: Date;
+}
+
+export interface ConsoleSnapshotInput {
   readonly now?: Date;
 }
 
@@ -223,6 +228,11 @@ export class RunStore {
     this.updateMetadata(preview, preview.metadata.status, now, { hasExport: true });
 
     return record;
+  }
+
+  createConsoleSnapshot(runId: string, input: ConsoleSnapshotInput = {}): ConsoleRunSnapshot {
+    const now = input.now ?? new Date();
+    return buildConsoleSnapshot(this.loadPreview(runId), now);
   }
 
   appendDecisionEntry(run: RunRecord, entry: DecisionLogEntry): void {
@@ -1321,6 +1331,177 @@ function markdownLine(value: string): string {
 
 function markdownParagraph(value: string): string {
   return markdownLine(value);
+}
+
+function buildConsoleSnapshot(preview: RunPreview, now: Date): ConsoleRunSnapshot {
+  const proposal = preview.proposal;
+  const bugBountyAssessment = preview.bugBountyScope?.moochackerAssessment
+    ?? (proposal.kind === "bug_bounty_review" ? proposal.moochackerAssessment : undefined);
+
+  return {
+    version: "0.1.0",
+    generatedAt: now.toISOString(),
+    source: {
+      kind: "dure-console-data",
+      readOnly: true,
+      redacted: true
+    },
+    run: {
+      id: preview.metadata.id,
+      status: preview.metadata.status,
+      selectedMode: preview.metadata.selectedMode,
+      proposalKind: preview.metadata.proposalKind,
+      proposalId: preview.metadata.proposalId,
+      createdAt: preview.metadata.createdAt,
+      updatedAt: preview.metadata.updatedAt,
+      input: redactedExportText(preview.request.originalInput),
+      requiresApproval: preview.metadata.requiresApproval,
+      nextRecommendedAction: redactedExportText(preview.metadata.nextRecommendedAction)
+    },
+    routing: {
+      inferredIntent: redactedExportText(preview.context.inferredIntent),
+      confidenceScore: preview.context.confidenceScore,
+      assumptions: redactedConsoleList(preview.context.assumptions),
+      requiredCapabilities: preview.context.requiredCapabilities,
+      safetyRequirements: redactedConsoleList(preview.context.safetyRequirements),
+      requiresUserApproval: preview.context.requiresUserApproval,
+      requiresExternalTools: preview.context.requiresExternalTools,
+      rejectedModes: preview.context.rejectedModes
+    },
+    agents: preview.metadata.selectedAgentTeam.map((agent) => ({
+      name: agent,
+      status: consoleAgentStatus(agent),
+      summary: consoleAgentSummary(agent)
+    })),
+    proposal: {
+      id: proposal.id,
+      kind: proposal.kind,
+      summary: redactedExportText(proposal.summary),
+      riskLevel: proposal.riskLevel,
+      requiresApproval: proposal.requiresApproval,
+      assumptions: redactedConsoleList(proposal.assumptions),
+      nextActions: redactedConsoleList(proposal.nextActions)
+    },
+    safety: {
+      allowed: preview.safetyDecision.allowed,
+      requiresApproval: preview.safetyDecision.requiresApproval,
+      externalToolsRequired: preview.safetyDecision.externalToolsRequired,
+      summary: redactedExportText(preview.safetyDecision.summary),
+      blockedCapabilities: preview.safetyDecision.blockedCapabilities,
+      details: redactedConsoleList(preview.safetyDecision.details)
+    },
+    verification: {
+      proposalAccepted: preview.verificationResult?.accepted,
+      workspaceAccepted: preview.workspaceVerificationRecord?.accepted,
+      checks: consoleVerificationChecks(preview)
+    },
+    development: proposal.kind === "patch"
+      ? {
+          stage: `${proposal.stage.id}: ${redactedExportText(proposal.stage.name)}`,
+          patchChanges: proposal.changes.map((change) => ({
+            path: markdownLine(change.path),
+            operation: change.operation,
+            rationale: redactedExportText(change.rationale)
+          })),
+          approval: preview.approvalRecord?.decision,
+          appliedFiles: preview.applyRecord?.files.length ?? 0
+        }
+      : undefined,
+    bugBounty: preview.metadata.selectedMode === "bug_bounty" || proposal.kind === "bug_bounty_review"
+      ? {
+          target: preview.bugBountyScope?.target ? redactedExportText(preview.bugBountyScope.target) : undefined,
+          scopeStatus: bugBountyAssessment?.scopeStatus,
+          safetyLevel: bugBountyAssessment?.safetyLevel,
+          evidenceLeads: preview.bugBountyEvidenceLedger?.entries.length ?? 0,
+          reportDrafts: preview.bugBountyReportDrafts?.length ?? 0,
+          stopConditions: proposal.kind === "bug_bounty_review" ? redactedConsoleList(proposal.stopConditions) : []
+        }
+      : undefined,
+    artifacts: {
+      hasApproval: preview.approvalRecord !== undefined,
+      hasApply: preview.applyRecord !== undefined,
+      hasWorkspaceVerification: preview.workspaceVerificationRecord !== undefined,
+      hasScope: preview.bugBountyScope !== undefined,
+      hasEvidenceLedger: preview.bugBountyEvidenceLedger !== undefined,
+      hasReports: (preview.bugBountyReportDrafts?.length ?? 0) > 0,
+      hasMarkdownExport: preview.artifactPaths.export !== undefined
+    },
+    decisions: preview.decisionLog.entries.map((entry) => ({
+      type: entry.type,
+      message: redactedExportText(entry.message),
+      timestamp: entry.timestamp
+    }))
+  };
+}
+
+function consoleVerificationChecks(preview: RunPreview): ConsoleRunSnapshot["verification"]["checks"] {
+  return [
+    ...(preview.verificationResult?.checks.map((check) => ({
+      name: check.name,
+      status: check.passed ? "passed" : "failed",
+      mocked: check.mocked,
+      summary: redactedExportText(check.summary)
+    })) ?? []),
+    ...(preview.workspaceVerificationRecord?.commands.map((command) => ({
+      name: command.name,
+      status: command.status,
+      mocked: false,
+      summary: command.configured ? `Configured package script: ${command.name}` : `Package script not configured: ${command.name}`
+    })) ?? [])
+  ];
+}
+
+function redactedConsoleList(values: readonly string[]): readonly string[] {
+  return values.map(redactedExportText);
+}
+
+function consoleAgentStatus(agent: AssistantAgentRole): "active" | "reviewing" | "guarding" {
+  if (agent === "MoochackerAgent" || agent === "ScopeGuardAgent" || agent === "SecurityAgent" || agent === "SecurityReviewAgent") {
+    return "guarding";
+  }
+  if (agent === "ReviewerAgent" || agent === "TesterAgent" || agent === "MaintainerAgent") {
+    return "reviewing";
+  }
+  return "active";
+}
+
+function consoleAgentSummary(agent: AssistantAgentRole): string {
+  switch (agent) {
+    case "MoochackerAgent":
+      return "Reviews authorization, scope boundaries, redaction, and bug bounty stop conditions.";
+    case "ScopeGuardAgent":
+      return "Keeps bug bounty work inside user-provided scope and program rules.";
+    case "EvidenceAgent":
+      return "Structures passive evidence ledger records without contacting targets.";
+    case "BuilderAgent":
+      return "Owns controlled patch proposals under Single Writer, Multi Reviewer policy.";
+    case "ReviewerAgent":
+      return "Reviews proposal quality, safety, and maintainability before acceptance.";
+    case "MaintainerAgent":
+      return "Checks long-term maintainability, rollback expectations, and audit clarity.";
+    case "TesterAgent":
+      return "Checks test expectations and verification readiness.";
+    case "SecurityAgent":
+    case "SecurityReviewAgent":
+      return "Checks security assumptions, blocked capabilities, and safe next actions.";
+    case "ArchitectAgent":
+      return "Reviews boundaries, sequencing, and implementation shape.";
+    case "ProductAgent":
+      return "Reduces scope to the smallest valuable next step.";
+    case "IntentAgent":
+    case "RouterAgent":
+      return "Interprets the user request and selected mode.";
+    case "DocumentationAgent":
+      return "Turns decisions into readable project documentation.";
+    case "OperationsAgent":
+      return "Plans operational checks without running external systems.";
+    case "ProductivityAgent":
+      return "Structures personal productivity tasks without external integrations.";
+    case "BugBountyAgent":
+      return "Coordinates authorized bug bounty planning with passive safety gates.";
+    case "AssistantAgent":
+      return "Handles general assistant planning and responses.";
+  }
 }
 
 function renderRunExportMarkdown(preview: RunPreview, record: RunExportRecord): string {

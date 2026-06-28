@@ -6,6 +6,13 @@ const modeTitle = document.querySelector("#mode-title");
 const stageTitle = document.querySelector("#stage-title");
 const coreMode = document.querySelector("#core-mode");
 const conversationTitle = document.querySelector("#conversation-title");
+const snapshotFile = document.querySelector("#snapshot-file");
+const snapshotFields = {
+  run: document.querySelector("#snapshot-run"),
+  status: document.querySelector("#snapshot-status"),
+  proposal: document.querySelector("#snapshot-proposal"),
+  decisions: document.querySelector("#snapshot-decisions")
+};
 
 const details = {
   name: document.querySelector("#agent-name"),
@@ -279,6 +286,7 @@ const conversations = [
 
 let selectedAgentId = "pm";
 let currentMode = "development";
+let snapshotConversationEntries = [];
 
 function agentById(id) {
   return agents.find((agent) => agent.id === id) ?? agents[0];
@@ -302,19 +310,23 @@ function renderAgents() {
   agentList.replaceChildren(
     ...agents.map((agent) => {
       const button = document.createElement("button");
+      const glyph = document.createElement("span");
+      const textWrap = document.createElement("span");
+      const name = document.createElement("strong");
+      const role = document.createElement("span");
+
       button.type = "button";
       button.className = "agent-row";
       button.setAttribute("role", "option");
       button.setAttribute("aria-selected", String(agent.id === selectedAgentId));
       button.dataset.agentId = agent.id;
       button.style.setProperty("--agent-color", agent.color);
-      button.innerHTML = `
-        <span class="agent-glyph shape-${agent.shape}" aria-hidden="true"></span>
-        <span>
-          <strong>${agent.name}</strong>
-          <span>${agent.role}</span>
-        </span>
-      `;
+      glyph.className = `agent-glyph shape-${agent.shape}`;
+      glyph.setAttribute("aria-hidden", "true");
+      name.textContent = agent.name;
+      role.textContent = agent.role;
+      textWrap.append(name, role);
+      button.append(glyph, textWrap);
       return button;
     })
   );
@@ -332,7 +344,9 @@ function renderAgents() {
       button.style.setProperty("--x", agent.x);
       button.style.setProperty("--y", agent.y);
       button.setAttribute("aria-label", `Select ${agent.name}, ${agent.role}`);
-      button.innerHTML = `<span>${agent.name.slice(0, 2)}</span>`;
+      const label = document.createElement("span");
+      label.textContent = agent.name.slice(0, 2);
+      button.append(label);
       return button;
     })
   );
@@ -351,7 +365,7 @@ function renderInspector() {
 }
 
 function renderConversation() {
-  const visible = conversations.filter(
+  const visible = [...snapshotConversationEntries, ...conversations].filter(
     (entry) =>
       (entry.mode === "all" || entry.mode === currentMode) &&
       (entry.agentId === selectedAgentId || entry.agentId === "pm")
@@ -362,17 +376,26 @@ function renderConversation() {
       const agent = agentById(entry.agentId);
       const article = document.createElement("article");
       article.className = "conversation-entry";
-      article.innerHTML = `
-        <div class="speaker">
-          <strong>${agent.name}</strong>
-          <span>${agent.role}</span>
-        </div>
-        <div class="entry-body">
-          <span class="entry-kind">${entry.kind}</span>
-          <h3>${entry.title}</h3>
-          <p>${entry.body}</p>
-        </div>
-      `;
+      const speaker = document.createElement("div");
+      const speakerName = document.createElement("strong");
+      const speakerRole = document.createElement("span");
+      const body = document.createElement("div");
+      const kind = document.createElement("span");
+      const title = document.createElement("h3");
+      const text = document.createElement("p");
+
+      speaker.className = "speaker";
+      body.className = "entry-body";
+      kind.className = "entry-kind";
+      speakerName.textContent = agent.name;
+      speakerRole.textContent = agent.role;
+      kind.textContent = entry.kind;
+      title.textContent = entry.title;
+      text.textContent = entry.body;
+
+      speaker.append(speakerName, speakerRole);
+      body.append(kind, title, text);
+      article.append(speaker, body);
       return article;
     })
   );
@@ -402,6 +425,69 @@ function selectAgent(agentId) {
   renderConversation();
 }
 
+function applyConsoleSnapshot(snapshot) {
+  const runMode = normalizeSnapshotMode(snapshot.run.selectedMode);
+  snapshotConversationEntries = snapshot.decisions.slice(-6).reverse().map((entry) => ({
+    mode: "all",
+    agentId: decisionAgent(entry.type),
+    kind: "Decision Log",
+    title: entry.type.replace(/_/g, " "),
+    body: `${entry.timestamp}: ${entry.message}`
+  }));
+
+  setText(snapshotFields.run, snapshot.run.id);
+  setText(snapshotFields.status, snapshot.run.status);
+  setText(snapshotFields.proposal, `${snapshot.run.proposalKind} / ${snapshot.proposal.riskLevel}`);
+  setText(snapshotFields.decisions, String(snapshot.decisions.length));
+  updateMode(runMode);
+  selectAgent(snapshot.run.selectedMode === "bug_bounty" ? "moochacker" : "pm");
+}
+
+function normalizeSnapshotMode(mode) {
+  return mode === "bug_bounty" ? "bug-bounty" : "development";
+}
+
+function decisionAgent(type) {
+  if (type.includes("bug_bounty") || type.includes("safety")) {
+    return "moochacker";
+  }
+  if (type.includes("verification") || type.includes("review")) {
+    return "reviewer";
+  }
+  if (type.includes("proposal") || type.includes("patch")) {
+    return "developer";
+  }
+  return "pm";
+}
+
+function isConsoleSnapshot(value) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      value.version === "0.1.0" &&
+      value.source?.kind === "dure-console-data" &&
+      value.source?.readOnly === true &&
+      value.run?.id &&
+      value.proposal?.kind &&
+      Array.isArray(value.decisions)
+  );
+}
+
+async function importSnapshotFile(file) {
+  try {
+    const source = await file.text();
+    const snapshot = JSON.parse(source);
+    if (!isConsoleSnapshot(snapshot)) {
+      throw new Error("Unsupported Dure console data file.");
+    }
+    applyConsoleSnapshot(snapshot);
+  } catch (error) {
+    setText(snapshotFields.status, error instanceof Error ? error.message : "Unable to import snapshot.");
+  } finally {
+    snapshotFile.value = "";
+  }
+}
+
 document.addEventListener("click", (event) => {
   const modeButton = event.target.closest("[data-mode-choice]");
   if (modeButton) {
@@ -418,6 +504,13 @@ document.addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     selectAgent("pm");
+  }
+});
+
+snapshotFile.addEventListener("change", (event) => {
+  const file = event.target.files?.[0];
+  if (file) {
+    void importSnapshotFile(file);
   }
 });
 

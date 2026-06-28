@@ -89,9 +89,10 @@ Inspect persisted runs:
 corepack pnpm cli -- runs --limit 10
 corepack pnpm cli -- show <run-id>
 corepack pnpm cli -- export <run-id>
+corepack pnpm cli -- console-data <run-id> --output .dure/runs/<run-id>/console-data.json
 ```
 
-`runs` lists recent `.dure/runs` records, `show` prints a mode-neutral run summary, and `export` writes a redacted Markdown audit summary to `.dure/runs/<run-id>/export.md`.
+`runs` lists recent `.dure/runs` records, `show` prints a mode-neutral run summary, `export` writes a redacted Markdown audit summary to `.dure/runs/<run-id>/export.md`, and `console-data` emits a redacted read-only JSON snapshot for the static UI prototype.
 
 Preview a persisted development patch proposal:
 
@@ -164,7 +165,13 @@ apps/ui/index.html
 
 Open that file directly in a browser to preview the Stage 16 UI concept. It shows clickable agent dots, curated council discussion, green Development Mode lighting, and red Bug Bounty / Security Mode lighting.
 
-The prototype is intentionally local-only. It does not call a backend, store run records, execute tools, scan targets, approve patches, apply files, or verify workspaces.
+To inspect a persisted run in the prototype, generate a console snapshot and import the JSON from the Run Snapshot panel:
+
+```bash
+corepack pnpm cli -- console-data <run-id> --output .dure/runs/<run-id>/console-data.json
+```
+
+The prototype is intentionally local-only. It does not call a backend, store run records, execute tools, scan targets, approve patches, apply files, or verify workspaces. Browser import uses a user-selected JSON file rather than direct filesystem access.
 
 ## Example Output Shape
 
