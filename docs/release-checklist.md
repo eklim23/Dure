@@ -13,6 +13,8 @@ Use this checklist before tagging a Dure release.
 
 - [ ] `corepack pnpm install --frozen-lockfile`
 - [ ] `corepack pnpm test`
+- [ ] Smoke: `corepack pnpm cli -- help`
+- [ ] Smoke: `corepack pnpm cli -- help target-map`
 - [ ] Smoke: `corepack pnpm cli -- --mode development "Create a tiny CLI app"`
 - [ ] Smoke: `corepack pnpm cli -- --mode bug-bounty "Prepare an authorized bug bounty scope and evidence plan"`
 - [ ] Smoke: record `scope` and `target-map` for the bug bounty run using only user-supplied passive data.

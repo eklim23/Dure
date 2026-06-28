@@ -64,6 +64,14 @@ Assistant-first:
 corepack pnpm cli -- "Create a simple login-enabled bulletin board"
 ```
 
+CLI help:
+
+```bash
+corepack pnpm cli -- help
+corepack pnpm cli -- help target-map
+corepack pnpm cli -- preview --help
+```
+
 Force one of the primary modes:
 
 ```bash
@@ -92,7 +100,7 @@ corepack pnpm cli -- export <run-id>
 corepack pnpm cli -- console-data <run-id> --output .dure/runs/<run-id>/console-data.json
 ```
 
-`runs` lists recent `.dure/runs` records, `show` prints a mode-neutral run summary, `export` writes a redacted Markdown audit summary to `.dure/runs/<run-id>/export.md`, and `console-data` emits a redacted read-only JSON snapshot for the static UI prototype.
+`runs` lists recent `.dure/runs` records, `show` prints a mode-neutral run summary plus suggested next commands, `export` writes a redacted Markdown audit summary to `.dure/runs/<run-id>/export.md`, and `console-data` emits a redacted read-only JSON snapshot for the static UI prototype.
 
 Development runs also persist `.dure/runs/<run-id>/project-state.json`. This records file index summary, package manager evidence, detected languages/frameworks, configured `test`/`lint`/`typecheck`/`build` scripts, and a current MVP stage estimate. Dure does not execute those scripts during project state detection.
 

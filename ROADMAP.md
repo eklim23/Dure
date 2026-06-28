@@ -22,6 +22,7 @@
 - Bug bounty evidence ledger persistence with redaction
 - Bug bounty report draft markdown export
 - Safety policy engine with mode capability allowlists, stop conditions, passive target-map capability separation, and bug bounty run gates
+- CLI UX polish with grouped help, command-specific help, and context-aware suggested commands
 - CLI run listing, mode-neutral show, and redacted Markdown export
 - Open-source baseline: CI, issue/PR templates, license, demo transcript, release checklist, and architecture diagram
 - Read-only Dure Console static UI prototype for agent activity visualization

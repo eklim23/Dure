@@ -47,6 +47,11 @@ const args = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
 try {
   const parsed = parseArgs(args);
 
+  if (parsed.command === "help") {
+    printHelp(parsed.helpTopic);
+    process.exit(0);
+  }
+
   if (parsed.command === "runs") {
     const runs = new RunStore().listRuns({ limit: parsed.limit });
     printRuns(runs);
@@ -207,6 +212,7 @@ try {
 
 interface ParsedArgs {
   readonly command?:
+    | "help"
     | "run"
     | "ask"
     | "runs"
@@ -239,11 +245,23 @@ interface ParsedArgs {
   readonly listEvidence?: boolean;
   readonly bugBountyReportDraftInput?: BugBountyReportDraftInput;
   readonly listReports?: boolean;
+  readonly helpTopic?: string;
   readonly modeOverride?: TaskMode;
   readonly persist: boolean;
 }
 
 function parseArgs(tokens: readonly string[]): ParsedArgs {
+  if (tokens[0] === "help") {
+    return { command: "help", helpTopic: tokens[1], persist: true };
+  }
+  if (tokens[0] === "--help" || tokens[0] === "-h") {
+    return { command: "help", helpTopic: tokens[1], persist: true };
+  }
+  const helpIndex = tokens.findIndex((token) => token === "--help" || token === "-h");
+  if (helpIndex > 0) {
+    return { command: "help", helpTopic: tokens[0], persist: true };
+  }
+
   const remaining: string[] = [];
   let modeOverride: TaskMode | undefined;
   let persist = true;
@@ -900,26 +918,217 @@ function parseRiskLevel(value: string): RiskLevel {
   throw new Error(`Unknown risk level: ${value}`);
 }
 
+function printHelp(topic?: string): void {
+  const normalizedTopic = topic?.trim().toLowerCase();
+  if (!normalizedTopic) {
+    printUsage();
+    return;
+  }
+
+  const help = commandHelp(normalizedTopic);
+  if (!help) {
+    throw new Error(`Unknown help topic: ${topic}. Use \`dure help\` to list commands.`);
+  }
+
+  console.log(`Dure Help: ${help.name}`);
+  console.log("");
+  section("Purpose", [help.purpose]);
+  section("Usage", help.usage);
+  if (help.options.length > 0) {
+    section("Key Options", help.options);
+  }
+  section("Safety", help.safety);
+  section("Next", help.next);
+}
+
 function printUsage(): void {
-  console.log("Usage:");
-  console.log('  dure "Create a simple login-enabled bulletin board"');
-  console.log('  dure --mode bug-bounty "Map scope for an authorized web target"');
-  console.log('  dure --no-persist "Temporary dry conversation"');
-  console.log('  dure ask "Draft a README for this project"');
-  console.log('  dure run "Create a simple login-enabled bulletin board"');
-  console.log("  dure runs --limit 10");
-  console.log("  dure show <run-id>");
-  console.log("  dure export <run-id>");
-  console.log("  dure console-data <run-id> --output .dure/runs/<run-id>/console-data.json");
-  console.log("  dure preview <run-id>");
-  console.log('  dure approve <run-id> --confirm-risk medium --reason "Reviewed the patch proposal"');
-  console.log('  dure reject <run-id> --reason "Scope is unclear"');
-  console.log('  dure apply <run-id> --workspace ".dure/workspaces/<run-id>"');
-  console.log("  dure verify <run-id> --script test --timeout-ms 30000");
-  console.log('  dure scope <run-id> --target "api.example.com" --in-scope "api.example.com" --forbidden "DoS,brute force"');
-  console.log('  dure target-map <run-id> --host "api.example.com" --api-base "https://api.example.com/v1" --endpoint "GET|api.example.com|/v1/orders|authenticated|user|false|none"');
-  console.log('  dure evidence <run-id> --asset "api.example.com" --hypothesis "IDOR on order detail" --impact "Potential cross-account read" --scope-note "In scope" --next-action "Confirm with test accounts"');
-  console.log("  dure report <run-id> --lead <lead-id> --severity medium");
+  console.log("Dure CLI Help");
+  console.log("");
+  section("Natural Language", [
+    'dure "Create a simple login-enabled bulletin board"',
+    'dure --mode development "Create a small CLI app"',
+    'dure --mode bug-bounty "Prepare an authorized bug bounty scope and evidence plan"',
+    'dure --no-persist "Temporary dry conversation"'
+  ]);
+  section("Run Inspection", [
+    "dure runs --limit 10",
+    "dure show <run-id>",
+    "dure export <run-id>",
+    "dure console-data <run-id> --output .dure/runs/<run-id>/console-data.json"
+  ]);
+  section("Development Workflow", [
+    "dure preview <run-id>",
+    'dure approve <run-id> --confirm-risk medium --reason "Reviewed the patch proposal"',
+    'dure reject <run-id> --reason "Scope is unclear"',
+    'dure apply <run-id> --workspace ".dure/workspaces/<run-id>"',
+    "dure verify <run-id> --script test --timeout-ms 30000"
+  ]);
+  section("Bug Bounty Workflow", [
+    'dure scope <run-id> --target "api.example.com" --in-scope "api.example.com" --forbidden "DoS,brute force"',
+    'dure target-map <run-id> --host "api.example.com" --api-base "https://api.example.com/v1" --endpoint "GET|api.example.com|/v1/orders|authenticated|user|false|none"',
+    'dure evidence <run-id> --asset "api.example.com" --hypothesis "IDOR on order detail" --impact "Potential cross-account read" --scope-note "In scope" --next-action "Confirm with owned test accounts"',
+    "dure report <run-id> --lead <lead-id> --severity medium"
+  ]);
+  section("More Help", [
+    "dure help run",
+    "dure help preview",
+    "dure help target-map",
+    "dure help evidence",
+    "dure help report"
+  ]);
+}
+
+interface CommandHelp {
+  readonly name: string;
+  readonly purpose: string;
+  readonly usage: readonly string[];
+  readonly options: readonly string[];
+  readonly safety: readonly string[];
+  readonly next: readonly string[];
+}
+
+function commandHelp(topic: string): CommandHelp | undefined {
+  const normalized = topic === "bug-bounty" ? "bug_bounty" : topic;
+  const help: Record<string, CommandHelp> = {
+    run: {
+      name: "run",
+      purpose: "Create a persisted Dure run from a natural language request.",
+      usage: ['dure run "Create a simple login-enabled bulletin board"', 'dure "Create a simple login-enabled bulletin board"'],
+      options: ["--mode development", "--mode bug-bounty", "--no-persist"],
+      safety: ["Creates proposals and run records; it does not apply files, run commands, scan targets, or contact external services."],
+      next: ["Use `dure show <run-id>` to inspect the run."]
+    },
+    ask: {
+      name: "ask",
+      purpose: "Use Dure as an assistant-first planning command while still preserving mode routing.",
+      usage: ['dure ask "Draft a README for this project"'],
+      options: ["--mode <mode>", "--no-persist"],
+      safety: ["No slash commands are required; natural language is routed through Dure's intent model."],
+      next: ["Use `dure runs --limit 10` to find persisted runs."]
+    },
+    development: {
+      name: "--mode development",
+      purpose: "Force Development Mode for MVP-first code planning and controlled patch proposals.",
+      usage: ['dure --mode development "Create a small CLI app"'],
+      options: ["--no-persist"],
+      safety: ["Development Mode can propose patches, but approval/apply/verify are separate commands."],
+      next: ["Use `dure preview <run-id>` before approval."]
+    },
+    bug_bounty: {
+      name: "--mode bug-bounty",
+      purpose: "Force Bug Bounty Mode for authorized, passive security review planning.",
+      usage: ['dure --mode bug-bounty "Prepare an authorized bug bounty scope and evidence plan"'],
+      options: ["--no-persist"],
+      safety: ["Bug Bounty Mode in v0.1 records scope, target maps, evidence notes, and report drafts only from user-supplied data."],
+      next: ["Use `dure scope <run-id>` before target maps, evidence, or reports."]
+    },
+    runs: {
+      name: "runs",
+      purpose: "List recent persisted run records.",
+      usage: ["dure runs", "dure runs --limit 10"],
+      options: ["--limit <positive integer>"],
+      safety: ["Read-only; does not modify run artifacts."],
+      next: ["Use `dure show <run-id>` for the next command suggestion."]
+    },
+    show: {
+      name: "show",
+      purpose: "Show mode-neutral run context, artifacts, decision log count, and suggested next commands.",
+      usage: ["dure show <run-id>"],
+      options: [],
+      safety: ["Read-only; does not approve, apply, verify, scan, or contact targets."],
+      next: ["Follow the `Suggested Commands` section."]
+    },
+    preview: {
+      name: "preview",
+      purpose: "Inspect a development patch proposal before approval.",
+      usage: ["dure preview <run-id>"],
+      options: [],
+      safety: ["Read-only; prints proposal metadata and unified diff without applying files."],
+      next: ["If acceptable, use `dure approve <run-id> --confirm-risk <level>`."]
+    },
+    approve: {
+      name: "approve",
+      purpose: "Record user approval for a verified patch proposal.",
+      usage: ['dure approve <run-id> --confirm-risk medium --reason "Reviewed the patch proposal"'],
+      options: ["--confirm-risk low|medium|high", "--reason <text>"],
+      safety: ["Approval records policy metadata only; it does not apply files or run commands."],
+      next: ["Use `dure apply <run-id>` after approval."]
+    },
+    reject: {
+      name: "reject",
+      purpose: "Record user rejection for a proposal.",
+      usage: ['dure reject <run-id> --reason "Needs a narrower scope"'],
+      options: ["--reason <text>"],
+      safety: ["Records the decision and leaves artifacts untouched."],
+      next: ["Create a new run with clarified requirements."]
+    },
+    apply: {
+      name: "apply",
+      purpose: "Apply an approved patch into a controlled workspace.",
+      usage: ["dure apply <run-id>", 'dure apply <run-id> --workspace ".dure/workspaces/<run-id>"'],
+      options: ["--workspace <path>"],
+      safety: ["Allows create/modify only, blocks deletes and unsafe paths, and records rollback metadata."],
+      next: ["Use `dure verify <run-id> --script test`."]
+    },
+    verify: {
+      name: "verify",
+      purpose: "Run allow-listed package scripts against the applied workspace.",
+      usage: ["dure verify <run-id>", "dure verify <run-id> --script test --timeout-ms 30000"],
+      options: ["--workspace <path>", "--script test|lint|typecheck", "--timeout-ms <positive integer>"],
+      safety: ["Runs only allow-listed scripts, blocks lifecycle hooks, and redacts secret-like output."],
+      next: ["If accepted, use `dure export <run-id>`."]
+    },
+    scope: {
+      name: "scope",
+      purpose: "Record authorized bug bounty scope and rules of engagement.",
+      usage: ['dure scope <run-id> --target "api.example.com" --in-scope "api.example.com" --out-of-scope "admin.example.com"'],
+      options: ["--scope-file <json>", "--target", "--in-scope", "--out-of-scope", "--allowed", "--forbidden", "--rate-limit", "--roles", "--data", "--authorization-note", "--program-rules-url"],
+      safety: ["Record-only; Dure does not contact targets, discover assets, or run tests."],
+      next: ["Use `dure target-map <run-id>` with user-supplied artifacts."]
+    },
+    "target-map": {
+      name: "target-map",
+      purpose: "Record or show a passive bug bounty target map.",
+      usage: ["dure target-map <run-id>", 'dure target-map <run-id> --host "api.example.com" --endpoint "GET|api.example.com|/v1/orders|authenticated|user|false|none"'],
+      options: ["--host", "--app", "--api-base", "--auth-state", "--role-access role|auth|can|cannot|notes", "--endpoint method|host|path|auth|roles|state-changing|file-flow|parameters|redirects|third-party|notes", "--file-flow", "--redirect", "--third-party", "--artifact", "--notes"],
+      safety: ["Record-only from user-supplied artifacts; out-of-scope references block normal evidence and reports."],
+      next: ["Use `dure evidence <run-id>` after scope and target-map safety pass."]
+    },
+    evidence: {
+      name: "evidence",
+      purpose: "Record or list bug bounty evidence ledger entries.",
+      usage: ["dure evidence <run-id>", 'dure evidence <run-id> --asset "api.example.com" --hypothesis "Possible authorization issue" --impact "Potential cross-account read" --scope-note "In scope" --next-action "Confirm with owned test accounts"'],
+      options: ["--status hypothesis|testing|confirmed|duplicate-risk|non-issue|blocked", "--asset", "--endpoint", "--method", "--auth-state", "--role", "--hypothesis", "--request", "--response", "--impact", "--confidence low|medium|high", "--scope-note", "--next-action"],
+      safety: ["User-supplied ledger only; Dure redacts secrets and does not validate, reproduce, scan, or contact targets."],
+      next: ["Use `dure report <run-id> --lead <lead-id>` for reportable leads."]
+    },
+    report: {
+      name: "report",
+      purpose: "Draft or list bug bounty report drafts from stored evidence.",
+      usage: ["dure report <run-id>", "dure report <run-id> --lead <lead-id> --severity medium"],
+      options: ["--lead", "--title", "--severity informational|low|medium|high|critical", "--roles", "--step", "--remediation", "--limitations", "--duplicate-risk true|false"],
+      safety: ["Drafts from stored evidence only; does not validate findings, submit reports, or contact targets."],
+      next: ["Use `dure export <run-id>` after reviewing the draft."]
+    },
+    export: {
+      name: "export",
+      purpose: "Write a redacted Markdown audit summary for a run.",
+      usage: ["dure export <run-id>"],
+      options: [],
+      safety: ["Local export only; applies redaction to user-visible fields."],
+      next: ["Share or archive the generated Markdown after review."]
+    },
+    "console-data": {
+      name: "console-data",
+      purpose: "Emit a redacted read-only JSON snapshot for the static Dure Console prototype.",
+      usage: ["dure console-data <run-id>", "dure console-data <run-id> --output .dure/runs/<run-id>/console-data.json"],
+      options: ["--output <path>"],
+      safety: ["Read-only snapshot; the UI prototype does not execute tools or read run records directly."],
+      next: ["Open `apps/ui/index.html` and import the JSON."]
+    }
+  };
+
+  return help[normalized];
 }
 
 function printResult(result: AssistantRunResult): void {
@@ -955,6 +1164,7 @@ function printResult(result: AssistantRunResult): void {
   section("Safety Result", summarizeSafetyDecision(result.safetyDecision));
 
   section("Next Recommended Action", [result.nextRecommendedAction]);
+  section("Suggested Commands", suggestedCommandsForResult(result));
 }
 
 function summarizeSafetyDecision(decision: SafetyDecision): readonly string[] {
@@ -984,6 +1194,7 @@ function printRuns(runs: readonly RunListItem[]): void {
       : ["not recorded"]
   );
   section("Next", [runs.length > 0 ? "Use `dure show <run-id>` for full run context." : "Run a natural language request to create the first record."]);
+  section("Suggested Commands", runs.length > 0 ? ["dure show <run-id>"] : ['dure "Create a small app"']);
 }
 
 function printRunShow(preview: RunPreview): void {
@@ -1009,6 +1220,7 @@ function printRunShow(preview: RunPreview): void {
     ...(preview.decisionLog.entries.at(-1) ? [`latest: ${preview.decisionLog.entries.at(-1)?.type}`] : [])
   ]);
   section("Next", [preview.metadata.nextRecommendedAction]);
+  section("Suggested Commands", suggestedCommandsForPreview(preview));
 }
 
 function printRunExport(record: RunExportRecord): void {
@@ -1018,6 +1230,7 @@ function printRunExport(record: RunExportRecord): void {
   section("Artifact", [`path: ${record.outputPath}`]);
   section("Summary", [record.summary]);
   section("Next", [record.nextRecommendedAction]);
+  section("Suggested Commands", [`dure show ${record.runId}`]);
 }
 
 function printConsoleData(snapshot: ConsoleRunSnapshot, outputPath?: string): void {
@@ -1085,6 +1298,7 @@ function printRunPreview(preview: RunPreview): void {
     section("Workspace Verification", summarizeWorkspaceVerification(preview.workspaceVerificationRecord));
   }
   section("Next", [preview.metadata.nextRecommendedAction]);
+  section("Suggested Commands", suggestedCommandsForPreview(preview));
 }
 
 function summarizeArtifacts(preview: RunPreview): readonly string[] {
@@ -1104,6 +1318,119 @@ function summarizeArtifacts(preview: RunPreview): readonly string[] {
     lines.push(`export: ${preview.artifactPaths.export}`);
   }
   return lines;
+}
+
+function suggestedCommandsForResult(result: AssistantRunResult): readonly string[] {
+  const runId = result.runRecord?.id;
+  if (!runId) {
+    return ['dure "Create a small app"'];
+  }
+
+  if (result.proposal.kind === "patch") {
+    return [`dure preview ${runId}`, `dure show ${runId}`];
+  }
+  if (result.proposal.kind === "bug_bounty_review") {
+    return [`dure scope ${runId} --target "<authorized-target>" --in-scope "<asset>" --authorization-note "<program authorization>"`, `dure show ${runId}`];
+  }
+  return [`dure show ${runId}`, `dure export ${runId}`];
+}
+
+function suggestedCommandsForPreview(preview: RunPreview): readonly string[] {
+  const runId = preview.metadata.id;
+  if (preview.proposal.kind === "patch") {
+    switch (preview.metadata.status) {
+      case "proposed":
+        return [approvalCommandForPreview(preview), `dure reject ${runId} --reason "Needs changes"`];
+      case "approved":
+        return [`dure apply ${runId}`];
+      case "applied":
+        return [`dure verify ${runId} --script test`];
+      case "verified":
+        return [`dure export ${runId}`];
+      case "failed":
+        return [`dure show ${runId}`];
+      case "rejected":
+        return ['dure "Create a revised development request"'];
+    }
+  }
+
+  if (preview.proposal.kind === "bug_bounty_review") {
+    if (!preview.bugBountyScope) {
+      return [`dure scope ${runId} --target "<authorized-target>" --in-scope "<asset>" --authorization-note "<program authorization>"`];
+    }
+    if (preview.bugBountyScope.intakeAssessment.status !== "sufficient") {
+      return [`dure show ${runId}`, 'dure --mode bug-bounty "Prepare a clarified authorized scope plan"'];
+    }
+    if (!preview.bugBountyTargetMap) {
+      return [`dure target-map ${runId} --host "${preview.bugBountyScope.target}" --artifact "user supplied notes"`];
+    }
+    if (preview.bugBountyTargetMap.assessment.safetyLevel === "blocked") {
+      return [`dure evidence ${runId} --status blocked --asset "<out-of-scope-reference>" --hypothesis "Out-of-scope reference blocked" --impact "Not tested" --scope-note "Blocked by target-map safety gate" --next-action "Clarify scope"`];
+    }
+    const reportableLead = firstReportableLead(preview);
+    if (!reportableLead) {
+      return [`dure evidence ${runId} --asset "${preview.bugBountyScope.target}" --hypothesis "<scoped hypothesis>" --impact "<potential impact>" --scope-note "In scope" --next-action "Review with owned test accounts"`];
+    }
+    if ((preview.bugBountyReportDrafts?.length ?? 0) === 0) {
+      return [`dure report ${runId} --lead ${reportableLead.id} --severity medium`];
+    }
+    return [`dure export ${runId}`];
+  }
+
+  return [`dure export ${runId}`];
+}
+
+function approvalCommandForPreview(preview: RunPreview): string {
+  if (preview.proposal.kind !== "patch") {
+    return `dure approve ${preview.metadata.id}`;
+  }
+
+  const risk = getPatchPreview(preview.proposal).riskAssessment.overallRisk;
+  return risk === "low"
+    ? `dure approve ${preview.metadata.id} --reason "Reviewed preview output"`
+    : `dure approve ${preview.metadata.id} --confirm-risk ${risk} --reason "Reviewed preview output"`;
+}
+
+function suggestedCommandsForApproval(record: ApprovalRecord): readonly string[] {
+  if (record.nextStatus === "approved") {
+    return [`dure apply ${record.runId}`];
+  }
+  return ['dure "Create a revised request with narrower scope"'];
+}
+
+function suggestedCommandsForTargetMap(record: BugBountyTargetMapRecord): readonly string[] {
+  if (record.assessment.safetyLevel === "blocked") {
+    return [`dure evidence ${record.runId} --status blocked --asset "<out-of-scope-reference>" --hypothesis "Out-of-scope reference blocked" --impact "Not tested" --scope-note "Blocked by target-map safety gate" --next-action "Clarify scope"`];
+  }
+  return [`dure evidence ${record.runId} --asset "${record.scopeTarget}" --hypothesis "<scoped hypothesis>" --impact "<potential impact>" --scope-note "In scope" --next-action "Review with owned test accounts"`];
+}
+
+function suggestedCommandsForEvidenceRecord(record: BugBountyEvidenceRecord): readonly string[] {
+  if (record.status === "blocked" || record.status === "non-issue") {
+    return [`dure evidence ${record.runId}`];
+  }
+  return [`dure report ${record.runId} --lead ${record.id} --severity medium`];
+}
+
+function suggestedCommandsForEvidenceLedger(preview: RunPreview): readonly string[] {
+  const reportableLead = firstReportableLead(preview);
+  if (reportableLead) {
+    return [`dure report ${preview.metadata.id} --lead ${reportableLead.id} --severity medium`];
+  }
+  return suggestedCommandsForPreview(preview);
+}
+
+function suggestedCommandsForReportDrafts(preview: RunPreview): readonly string[] {
+  if ((preview.bugBountyReportDrafts?.length ?? 0) > 0) {
+    return [`dure export ${preview.metadata.id}`];
+  }
+  return suggestedCommandsForEvidenceLedger(preview);
+}
+
+function firstReportableLead(preview: RunPreview): BugBountyEvidenceRecord | undefined {
+  return preview.bugBountyEvidenceLedger?.entries.find((entry) =>
+    entry.status !== "blocked" && entry.status !== "non-issue"
+  );
 }
 
 function summarizeDevelopmentProjectState(state: DevelopmentProjectState): readonly string[] {
@@ -1159,6 +1486,7 @@ function printApproval(record: ApprovalRecord): void {
     );
   }
   section("Next", [record.nextRecommendedAction]);
+  section("Suggested Commands", suggestedCommandsForApproval(record));
 }
 
 function printScope(record: BugBountyScopeRecord): void {
@@ -1208,6 +1536,7 @@ function printScope(record: BugBountyScopeRecord): void {
       : ["Scope intake is sufficient for passive planning."]
   );
   section("Next Allowed", record.intakeAssessment.nextAllowedActions);
+  section("Suggested Commands", [`dure target-map ${record.runId} --host "${record.target}" --artifact "user supplied notes"`]);
 }
 
 function printTargetMap(record: BugBountyTargetMapRecord): void {
@@ -1257,6 +1586,7 @@ function printTargetMap(record: BugBountyTargetMapRecord): void {
     record.assessment.checks.map((check) => `${check.status}: ${check.id} - ${check.summary}`)
   );
   section("Next", record.assessment.nextRecommendedActions);
+  section("Suggested Commands", suggestedCommandsForTargetMap(record));
 }
 
 function printTargetMapPreview(preview: RunPreview): void {
@@ -1281,6 +1611,7 @@ function printTargetMapPreview(preview: RunPreview): void {
       ? "Record a passive target map from user-supplied artifacts before expanding evidence work."
       : "Record sufficient bug bounty scope before creating a target map."
   ]);
+  section("Suggested Commands", suggestedCommandsForPreview(preview));
 }
 
 function printEvidenceRecord(record: BugBountyEvidenceRecord): void {
@@ -1303,6 +1634,7 @@ function printEvidenceRecord(record: BugBountyEvidenceRecord): void {
     `redacted fields: ${formatList(record.redactedFields)}`
   ]);
   section("Next", [record.nextAction]);
+  section("Suggested Commands", suggestedCommandsForEvidenceRecord(record));
 }
 
 function printEvidenceLedger(preview: RunPreview): void {
@@ -1329,6 +1661,7 @@ function printEvidenceLedger(preview: RunPreview): void {
       ? "Use evidence status and confidence to decide whether to draft a report or mark the lead as blocked/non-issue."
       : "Record a scoped hypothesis before drafting a finding."
   ]);
+  section("Suggested Commands", suggestedCommandsForEvidenceLedger(preview));
 }
 
 function printReportDraft(record: BugBountyReportDraftRecord): void {
@@ -1346,6 +1679,7 @@ function printReportDraft(record: BugBountyReportDraftRecord): void {
   section("Severity", [record.severityRationale]);
   section("Export", [`markdown: ${record.markdownPath}`]);
   section("Next", [record.nextRecommendedAction]);
+  section("Suggested Commands", [`dure export ${record.runId}`]);
 }
 
 function printReportDrafts(preview: RunPreview): void {
@@ -1372,6 +1706,7 @@ function printReportDrafts(preview: RunPreview): void {
       ? "Review markdown drafts before submission and confirm severity against the program policy."
       : "Draft a report from a scoped evidence lead."
   ]);
+  section("Suggested Commands", suggestedCommandsForReportDrafts(preview));
 }
 
 function printApply(record: ApplyRecord): void {
@@ -1408,6 +1743,7 @@ function printApply(record: ApplyRecord): void {
     `backups: ${record.backupRoot}`
   ]);
   section("Next", [record.nextRecommendedAction]);
+  section("Suggested Commands", [`dure verify ${record.runId} --script test`]);
 }
 
 function printWorkspaceVerification(record: WorkspaceVerificationRecord): void {
@@ -1464,6 +1800,7 @@ function printWorkspaceVerification(record: WorkspaceVerificationRecord): void {
     record.localChecks.map((check) => `${check.name}: ${check.passed ? "pass" : "fail"} (${check.mocked ? "mocked" : "local"}) - ${check.summary}`)
   );
   section("Next", [record.nextRecommendedAction]);
+  section("Suggested Commands", record.accepted ? [`dure export ${record.runId}`] : [`dure show ${record.runId}`]);
 }
 
 function section(title: string, lines: readonly string[]): void {

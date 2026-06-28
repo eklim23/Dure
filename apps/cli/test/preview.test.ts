@@ -13,6 +13,26 @@ import type {
 } from "@dure/core";
 import { DecisionLogRecorder, RunStore } from "@dure/memory";
 
+test("help command prints grouped workflows and command-specific guidance", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-help-"));
+
+  const general = runCli(tempRoot, ["help"]);
+  const flag = runCli(tempRoot, ["--help"]);
+  const targetMap = runCli(tempRoot, ["help", "target-map"]);
+
+  assert.equal(general.status, 0, general.stderr);
+  assert.match(general.stdout, /Dure CLI Help/);
+  assert.match(general.stdout, /Development Workflow:/);
+  assert.match(general.stdout, /Bug Bounty Workflow:/);
+  assert.match(general.stdout, /dure help target-map/);
+  assert.equal(flag.status, 0, flag.stderr);
+  assert.match(flag.stdout, /Natural Language:/);
+  assert.equal(targetMap.status, 0, targetMap.stderr);
+  assert.match(targetMap.stdout, /Dure Help: target-map/);
+  assert.match(targetMap.stdout, /Record-only from user-supplied artifacts/);
+  assert.match(targetMap.stdout, /--endpoint method\|host\|path/);
+});
+
 test("preview command prints a persisted development patch", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-preview-"));
   const record = persistRun(tempRoot, patchProposalFixture(), "development");
@@ -31,6 +51,8 @@ test("preview command prints a persisted development patch", async () => {
   assert.match(result.stdout, /Unified Diff:/);
   assert.match(result.stdout, /diff --git a\/package\.json b\/package\.json/);
   assert.match(result.stdout, /accepted: yes/);
+  assert.match(result.stdout, /Suggested Commands:/);
+  assert.match(result.stdout, new RegExp(`dure approve ${record.id} --confirm-risk medium`));
 });
 
 test("preview command reports missing runs", async () => {
@@ -69,6 +91,8 @@ test("runs, show, and export commands inspect persisted runs", async () => {
   assert.match(show.stdout, /Dure Run/);
   assert.match(show.stdout, /Proposal:/);
   assert.match(show.stdout, /Artifacts:/);
+  assert.match(show.stdout, /Suggested Commands:/);
+  assert.match(show.stdout, new RegExp(`dure scope ${record.id}`));
   assert.equal(exported.status, 0, exported.stderr);
   assert.match(exported.stdout, /Dure Export/);
   assert.match(exported.stdout, /export\.md/);

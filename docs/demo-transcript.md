@@ -2,6 +2,22 @@
 
 This transcript shows the intended v0.1 CLI experience. Output is abbreviated for readability.
 
+## Help
+
+```bash
+corepack pnpm cli -- help
+corepack pnpm cli -- help target-map
+```
+
+```text
+Dure CLI Help
+
+Bug Bounty Workflow:
+  - dure scope <run-id> ...
+  - dure target-map <run-id> ...
+  - dure evidence <run-id> ...
+```
+
 ## Development Mode
 
 ```bash
