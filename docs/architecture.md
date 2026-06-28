@@ -64,7 +64,7 @@ User Natural Language Input
 
    `packages/task-modes` owns mode-specific deterministic behavior:
 
-   - Development Mode returns a `PatchProposal` and a read-only `DevelopmentProjectState`.
+   - Development Mode returns a `PatchProposal` with preview metadata and a read-only `DevelopmentProjectState`.
    - Bug Bounty Mode returns a `BugBountyReviewProposal` with a structured `MoochackerAgent` safety assessment.
    - Documentation Mode returns a `DocumentProposal`.
    - Security Mode returns a `SecurityReviewProposal`.
@@ -76,7 +76,7 @@ User Natural Language Input
 
    Development Mode and Bug Bounty Mode are the primary product surface.
 
-   Development Mode is for MVP-first software work and controlled patch proposals. In v0.1 it also performs static project state detection: file index summary, package manager evidence, language/framework signals, configured `test`/`lint`/`typecheck`/`build` scripts, and current MVP stage estimate. It does not execute scripts while detecting project state.
+   Development Mode is for MVP-first software work and controlled patch proposals. In v0.1 it also performs static project state detection: file index summary, package manager evidence, language/framework signals, configured `test`/`lint`/`typecheck`/`build` scripts, and current MVP stage estimate. Patch proposals include a read-only preview with summary, file-level change plan, risk assessment, and a proposal-generated unified diff. Dure does not execute scripts while detecting project state.
 
    Bug Bounty Mode is for authorized web security review planning. In v0.1 it creates only passive scope, target-map, hypothesis, evidence-ledger, and report scaffolds. It does not access targets or run active tests.
 
@@ -90,7 +90,7 @@ User Natural Language Input
 
 9. Controlled Execution
 
-   Development patches are proposals, not automatic edits. `approve` and `reject` create durable approval decisions under `.dure/runs/<run-id>/approval.json`; they do not apply files or execute commands. `apply` requires an approved patch run and writes create/modify operations only into a controlled workspace, recording `apply.json`, `rollback.json`, backups, and a decision-log event. `verify` then runs only allow-listed package scripts from the applied workspace and records `workspace-verification.json`. Bug Bounty Mode produces scope records, evidence ledger entries, and report drafts only from user-supplied data until explicit authorization and rules of engagement are known.
+   Development patches are proposals, not automatic edits. Preview metadata is safe to inspect before approval and does not read existing file content for modify/delete diffs. `approve` and `reject` create durable approval decisions under `.dure/runs/<run-id>/approval.json`; they do not apply files or execute commands. `apply` requires an approved patch run and writes create/modify operations only into a controlled workspace, recording `apply.json`, `rollback.json`, backups, and a decision-log event. `verify` then runs only allow-listed package scripts from the applied workspace and records `workspace-verification.json`. Bug Bounty Mode produces scope records, evidence ledger entries, and report drafts only from user-supplied data until explicit authorization and rules of engagement are known.
 
 10. Verification / Safety Gate
 
@@ -106,7 +106,7 @@ User Natural Language Input
 
 13. Memory / Decision Log
 
-   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, development project state, approval decisions, controlled apply records, workspace verification records, bug bounty scope intake, bug bounty evidence ledger entries, bug bounty report drafts, redacted Markdown run exports, and next recommended step.
+   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, development project state, patch preview metadata, approval decisions, controlled apply records, workspace verification records, bug bounty scope intake, bug bounty evidence ledger entries, bug bounty report drafts, redacted Markdown run exports, and next recommended step.
 
 ## MVP Ladder For Development Mode
 

@@ -17,6 +17,7 @@ flowchart TD
   Development --> ProjectState["DevelopmentProjectState static detector"]
   Orchestrator --> Council["packages/council"]
   Orchestrator --> BuilderRuntime["packages/builder-runtime"]
+  BuilderRuntime --> PatchPreview["PatchPreview metadata"]
   BuilderRuntime --> Sandbox["packages/sandbox"]
   Orchestrator --> Verifier["packages/verifier"]
 
@@ -48,6 +49,7 @@ flowchart TD
 - `packages/assistant-core` coordinates routing, mode execution, safety decision persistence, and run records.
 - `packages/task-modes` produces deterministic proposals.
 - Development project state detection is static and local; it reads metadata but does not execute scripts.
+- Patch preview metadata is proposal-generated and read-only; it summarizes risk, file-level change plans, and unified diff text before approval.
 - `packages/safety-policy` decides whether capabilities are allowed, warning-only, or blocked.
 - `packages/memory` persists run artifacts and redacted Markdown exports.
 - `packages/verifier` performs proposal-time and approved-workspace verification.

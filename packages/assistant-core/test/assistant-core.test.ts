@@ -113,6 +113,8 @@ test("assistant core persists development project state for development runs", a
   assert.equal(preview.decisionLog.entries.some((entry) => entry.type === "development_project_state"), true);
   assert.equal(snapshot.projectState?.packageManager, "npm");
   assert.equal(snapshot.artifacts.hasProjectState, true);
+  assert.ok(snapshot.development?.patchPreview);
+  assert.match(snapshot.development.patchPreview.unifiedDiff, /diff --git/);
 });
 
 test("assistant core persists MoochackerAgent in bug bounty run metadata", async () => {

@@ -15,6 +15,12 @@ test("BuilderRuntime can create a controlled patch proposal", () => {
   assert.equal(proposal.policy.singleWriter, true);
   assert.equal(proposal.author, "BuilderRuntime");
   assert.ok(proposal.changes.some((change) => change.path === "src/index.js"));
+  assert.ok(proposal.preview);
+  assert.equal(proposal.preview.changePlan.length, proposal.changes.length);
+  assert.equal(proposal.preview.riskAssessment.overallRisk, "high");
+  assert.equal(proposal.preview.riskAssessment.approvalRequired, true);
+  assert.match(proposal.preview.unifiedDiff, /diff --git a\/package\.json b\/package\.json/);
+  assert.match(proposal.preview.unifiedDiff, /\+  "name": "generated-mvp"/);
 });
 
 test("non-builder agents cannot create patch proposals", () => {

@@ -18,7 +18,11 @@ import type {
   BugBountyScopeRecord,
   ConsoleRunSnapshot,
   DevelopmentProjectState,
+  PatchChangePlan,
   PatchProposal,
+  PatchPreview,
+  PatchRiskAssessment,
+  RiskLevel,
   RunExportRecord,
   RunListItem,
   RunPreview,
@@ -882,6 +886,7 @@ function printRunPreview(preview: RunPreview): void {
   }
 
   const proposal = preview.proposal;
+  const patchPreview = getPatchPreview(proposal);
   console.log("Dure Preview");
   console.log("");
   section("Run", [
@@ -899,11 +904,19 @@ function printRunPreview(preview: RunPreview): void {
     `stage: ${proposal.stage.id} - ${proposal.stage.name}`,
     `goal: ${proposal.goal}`
   ]);
-  section("Summary", [proposal.summary]);
+  section("Summary", [
+    patchPreview.summary,
+    ...(preview.developmentProjectState
+      ? [`project context: ${preview.developmentProjectState.packageManager}, estimated stage ${preview.developmentProjectState.currentMvpStage.stage.id} - ${preview.developmentProjectState.currentMvpStage.stage.name}`]
+      : [])
+  ]);
+  section("Patch Risk", summarizePatchRisk(patchPreview.riskAssessment));
+  section("File-Level Change Plan", summarizeChangePlan(patchPreview.changePlan));
   section(
     "Changes",
     proposal.changes.map((change) => `${change.operation}: ${change.path} - ${change.rationale}`)
   );
+  blockSection("Unified Diff", patchPreview.unifiedDiff);
   section("Verification", summarizePreviewVerification(preview.verificationResult));
   if (preview.workspaceVerificationRecord) {
     section("Workspace Verification", summarizeWorkspaceVerification(preview.workspaceVerificationRecord));
@@ -1139,6 +1152,14 @@ function section(title: string, lines: readonly string[]): void {
   console.log("");
 }
 
+function blockSection(title: string, content: string): void {
+  console.log(`${title}:`);
+  for (const line of content.split("\n")) {
+    console.log(`  ${line}`);
+  }
+  console.log("");
+}
+
 function summarizeProposal(proposal: TaskModeProposal): readonly string[] {
   const base = [
     `${proposal.id} (${proposal.kind})`,
@@ -1176,10 +1197,170 @@ function summarizeProposal(proposal: TaskModeProposal): readonly string[] {
 }
 
 function summarizePatch(proposal: PatchProposal): readonly string[] {
+  const patchPreview = getPatchPreview(proposal);
   return [
     `status: ${proposal.status}`,
+    `preview risk: ${patchPreview.riskAssessment.overallRisk}`,
+    `separate approval: ${patchPreview.riskAssessment.separateApprovalRequired ? "yes" : "no"}`,
     ...proposal.changes.map((change) => `${change.operation}: ${change.path} - ${change.rationale}`)
   ];
+}
+
+function summarizePatchRisk(risk: PatchRiskAssessment): readonly string[] {
+  return [
+    `overall risk: ${risk.overallRisk}`,
+    `approval required: ${risk.approvalRequired ? "yes" : "no"}`,
+    `separate approval required: ${risk.separateApprovalRequired ? "yes" : "no"}`,
+    ...risk.reasons.map((reason) => `reason: ${reason}`)
+  ];
+}
+
+function summarizeChangePlan(changePlan: readonly PatchChangePlan[]): readonly string[] {
+  return changePlan.map((change) =>
+    `${change.operation}: ${change.path} [${change.riskLevel}] - ${change.purpose}; impact: ${change.expectedImpact}; review: ${change.reviewFocus.join(" | ")}`
+  );
+}
+
+function getPatchPreview(proposal: PatchProposal): PatchPreview {
+  return proposal.preview ?? buildFallbackPatchPreview(proposal);
+}
+
+function buildFallbackPatchPreview(proposal: PatchProposal): PatchPreview {
+  const changePlan = proposal.changes.map((change): PatchChangePlan => {
+    const riskLevel = riskForPatchChange(change.path, change.operation);
+    const requiresSeparateApproval = change.operation === "delete" || isSensitivePatchPath(change.path);
+    return {
+      path: change.path,
+      operation: change.operation,
+      purpose: change.rationale,
+      expectedImpact: expectedPatchImpact(change.path, change.operation),
+      riskLevel,
+      requiresApproval: true,
+      requiresSeparateApproval,
+      reviewFocus: [
+        "Confirm the path is inside the controlled workspace.",
+        "Confirm the change matches the selected MVP stage.",
+        change.content === undefined ? "Confirm no generated content is required for this operation." : "Review generated content before apply.",
+        requiresSeparateApproval ? "Separate approval is required before apply." : "Normal patch approval is sufficient."
+      ]
+    };
+  });
+  const riskAssessment = assessFallbackPatchRisk(proposal.riskLevel, changePlan);
+
+  return {
+    summary: `${proposal.summary} Review ${proposal.changes.length} planned file change${proposal.changes.length === 1 ? "" : "s"} before approval.`,
+    changePlan,
+    riskAssessment,
+    unifiedDiff: proposal.changes.map(diffForPatchChange).join("\n"),
+    generatedAt: proposal.createdAt
+  };
+}
+
+function assessFallbackPatchRisk(
+  proposalRisk: RiskLevel,
+  changePlan: readonly PatchChangePlan[]
+): PatchRiskAssessment {
+  const highestFileRisk = maxRisk([proposalRisk, ...changePlan.map((change) => change.riskLevel)]);
+  const separateApprovalRequired = changePlan.some((change) => change.requiresSeparateApproval);
+  return {
+    overallRisk: highestFileRisk,
+    approvalRequired: true,
+    separateApprovalRequired,
+    reasons: [
+      `proposal risk: ${proposalRisk}`,
+      `highest file risk: ${highestFileRisk}`,
+      separateApprovalRequired
+        ? "one or more changes touch deletion or sensitive paths"
+        : "all changes can use the normal patch approval gate"
+    ]
+  };
+}
+
+function riskForPatchChange(filePath: string, operation: PatchChangePlan["operation"]): RiskLevel {
+  if (operation === "delete" || isSensitivePatchPath(filePath)) {
+    return "high";
+  }
+  if (operation === "modify" || isPatchManifestPath(filePath)) {
+    return "medium";
+  }
+  return "low";
+}
+
+function expectedPatchImpact(filePath: string, operation: PatchChangePlan["operation"]): string {
+  switch (operation) {
+    case "create":
+      return `Creates ${filePath} as new project surface.`;
+    case "modify":
+      return `Updates existing behavior or configuration in ${filePath}.`;
+    case "delete":
+      return `Removes ${filePath}; this requires separate approval in v0.1.`;
+  }
+}
+
+function diffForPatchChange(change: PatchProposal["changes"][number]): string {
+  const target = change.path.replace(/\\/g, "/");
+  const contentLines = splitDiffLines(change.content ?? "");
+  if (change.operation === "create") {
+    return [
+      `diff --git a/${target} b/${target}`,
+      "new file mode 100644",
+      "--- /dev/null",
+      `+++ b/${target}`,
+      `@@ -0,0 +1,${Math.max(contentLines.length, 1)} @@`,
+      ...contentLines.map((line) => `+${line}`)
+    ].join("\n");
+  }
+  if (change.operation === "delete") {
+    return [
+      `diff --git a/${target} b/${target}`,
+      "deleted file mode 100644",
+      `--- a/${target}`,
+      "+++ /dev/null",
+      "@@ -1 +0,0 @@",
+      "-[existing file content not captured in proposal preview]"
+    ].join("\n");
+  }
+  return [
+    `diff --git a/${target} b/${target}`,
+    `--- a/${target}`,
+    `+++ b/${target}`,
+    `@@ -1 +1,${Math.max(contentLines.length, 1)} @@`,
+    "-[existing file content not captured in proposal preview]",
+    ...contentLines.map((line) => `+${line}`)
+  ].join("\n");
+}
+
+function splitDiffLines(content: string): readonly string[] {
+  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const withoutTrailingNewline = normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
+  return withoutTrailingNewline.length > 0 ? withoutTrailingNewline.split("\n") : [""];
+}
+
+function isSensitivePatchPath(filePath: string): boolean {
+  const normalized = filePath.toLowerCase();
+  return [".env", "auth", "authentication", "authorization", "credential", "secret", "security", "token"]
+    .some((signal) => normalized.includes(signal));
+}
+
+function isPatchManifestPath(filePath: string): boolean {
+  const normalized = filePath.toLowerCase();
+  return normalized.endsWith("package.json")
+    || normalized.endsWith("pnpm-lock.yaml")
+    || normalized.endsWith("package-lock.json")
+    || normalized.endsWith("yarn.lock")
+    || normalized.endsWith("bun.lock")
+    || normalized.endsWith("bun.lockb")
+    || normalized.endsWith("tsconfig.json");
+}
+
+function maxRisk(values: readonly RiskLevel[]): RiskLevel {
+  if (values.includes("high")) {
+    return "high";
+  }
+  if (values.includes("medium")) {
+    return "medium";
+  }
+  return "low";
 }
 
 function summarizeChecks(checks: readonly VerificationCheck[], accepted: boolean): readonly string[] {

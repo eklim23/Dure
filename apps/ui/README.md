@@ -11,6 +11,7 @@ Open `index.html` directly in a browser. The prototype has no backend, no networ
 - Clickable agent dots with distinct shapes
 - Curated internal discussion notes for each agent
 - Import of redacted `dure console-data` JSON snapshots
+- Snapshot summaries for detected project state and development patch preview risk
 - PM approval criteria for the prototype scope
 - Explicit simulated/read-only status copy
 
@@ -31,3 +32,4 @@ Then open `index.html` and import that JSON from the Run Snapshot panel.
 - It does not read or write run records.
 - It does not scan targets or make HTTP requests.
 - It does not approve, apply, or verify patches.
+- It does not treat imported diff text as executable change data.

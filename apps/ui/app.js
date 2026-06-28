@@ -13,7 +13,9 @@ const snapshotFields = {
   proposal: document.querySelector("#snapshot-proposal"),
   decisions: document.querySelector("#snapshot-decisions"),
   project: document.querySelector("#snapshot-project"),
-  scripts: document.querySelector("#snapshot-scripts")
+  scripts: document.querySelector("#snapshot-scripts"),
+  patchRisk: document.querySelector("#snapshot-patch-risk"),
+  patchFiles: document.querySelector("#snapshot-patch-files")
 };
 
 const details = {
@@ -429,13 +431,16 @@ function selectAgent(agentId) {
 
 function applyConsoleSnapshot(snapshot) {
   const runMode = normalizeSnapshotMode(snapshot.run.selectedMode);
-  snapshotConversationEntries = snapshot.decisions.slice(-6).reverse().map((entry) => ({
-    mode: "all",
-    agentId: decisionAgent(entry.type),
-    kind: "Decision Log",
-    title: entry.type.replace(/_/g, " "),
-    body: `${entry.timestamp}: ${entry.message}`
-  }));
+  snapshotConversationEntries = [
+    ...patchPreviewEntries(snapshot),
+    ...snapshot.decisions.slice(-6).reverse().map((entry) => ({
+      mode: "all",
+      agentId: decisionAgent(entry.type),
+      kind: "Decision Log",
+      title: entry.type.replace(/_/g, " "),
+      body: `${entry.timestamp}: ${entry.message}`
+    }))
+  ];
 
   setText(snapshotFields.run, snapshot.run.id);
   setText(snapshotFields.status, snapshot.run.status);
@@ -443,8 +448,26 @@ function applyConsoleSnapshot(snapshot) {
   setText(snapshotFields.decisions, String(snapshot.decisions.length));
   setText(snapshotFields.project, summarizeSnapshotProject(snapshot));
   setText(snapshotFields.scripts, summarizeSnapshotScripts(snapshot));
+  setText(snapshotFields.patchRisk, summarizeSnapshotPatchRisk(snapshot));
+  setText(snapshotFields.patchFiles, summarizeSnapshotPatchFiles(snapshot));
   updateMode(runMode);
-  selectAgent(snapshot.run.selectedMode === "bug_bounty" ? "moochacker" : "pm");
+  selectAgent(snapshot.run.selectedMode === "bug_bounty" ? "moochacker" : "developer");
+}
+
+function patchPreviewEntries(snapshot) {
+  const preview = snapshot.development?.patchPreview;
+  if (!preview) {
+    return [];
+  }
+  return [
+    {
+      mode: "development",
+      agentId: "developer",
+      kind: "Patch Preview",
+      title: `Risk ${preview.riskAssessment.overallRisk}`,
+      body: `${preview.summary} Files: ${preview.changePlan.map((change) => `${change.operation} ${change.path}`).join(", ")}.`
+    }
+  ];
 }
 
 function summarizeSnapshotProject(snapshot) {
@@ -461,6 +484,21 @@ function summarizeSnapshotScripts(snapshot) {
   return snapshot.projectState.configuredScripts.length > 0
     ? snapshot.projectState.configuredScripts.join(", ")
     : "none";
+}
+
+function summarizeSnapshotPatchRisk(snapshot) {
+  const preview = snapshot.development?.patchPreview;
+  if (!preview) {
+    return "not recorded";
+  }
+  return preview.riskAssessment.separateApprovalRequired
+    ? `${preview.riskAssessment.overallRisk} / separate approval`
+    : preview.riskAssessment.overallRisk;
+}
+
+function summarizeSnapshotPatchFiles(snapshot) {
+  const preview = snapshot.development?.patchPreview;
+  return preview ? String(preview.changePlan.length) : "0";
 }
 
 function normalizeSnapshotMode(mode) {

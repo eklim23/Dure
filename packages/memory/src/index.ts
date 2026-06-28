@@ -1442,6 +1442,19 @@ function buildConsoleSnapshot(preview: RunPreview, now: Date): ConsoleRunSnapsho
             operation: change.operation,
             rationale: redactedExportText(change.rationale)
           })),
+          patchPreview: proposal.preview
+            ? {
+                summary: redactedExportText(proposal.preview.summary),
+                riskAssessment: proposal.preview.riskAssessment,
+                changePlan: proposal.preview.changePlan.map((change) => ({
+                  ...change,
+                  purpose: redactedExportText(change.purpose),
+                  expectedImpact: redactedExportText(change.expectedImpact),
+                  reviewFocus: redactedConsoleList(change.reviewFocus)
+                })),
+                unifiedDiff: proposal.preview.unifiedDiff
+              }
+            : undefined,
           approval: preview.approvalRecord?.decision,
           appliedFiles: preview.applyRecord?.files.length ?? 0
         }

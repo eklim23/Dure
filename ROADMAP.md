@@ -26,6 +26,7 @@
 - Read-only Dure Console static UI prototype for agent activity visualization
 - Redacted console-data JSON export and UI import for persisted run inspection
 - Development Mode project state detection for package manager, languages, frameworks, scripts, and MVP stage estimate
+- Development patch preview metadata with file-level change plan, risk assessment, and unified diff
 
 ## v0.2
 
@@ -34,6 +35,7 @@
 - Evidence ledger and report draft update/edit commands
 - Configurable export formats and destinations
 - Richer Development Mode project-state detection
+- Richer patch preview UX with controlled workspace content comparison after approval
 - Security checklist engine
 - Configurable policy defaults
 - Verification UX polish and richer summaries

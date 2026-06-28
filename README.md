@@ -18,7 +18,7 @@ Other assistant capabilities can exist as supporting utilities, but they should 
 - Assistant Core for natural language request handling
 - Intent Router for automatic task mode selection
 - Deterministic task modes with structured proposals
-- Development Mode with the existing MVP-first orchestrator and read-only project state detection
+- Development Mode with the existing MVP-first orchestrator, read-only project state detection, and patch preview metadata
 - Bug Bounty Mode with authorization, scope, evidence, and report gates
 - Documentation, Security, Operations, Productivity, and Assistant modes as supporting deterministic stubs
 - Single Writer, Multi Reviewer for development patches
@@ -31,7 +31,7 @@ Other assistant capabilities can exist as supporting utilities, but they should 
 
 ## Primary Modes
 
-- Development Mode: code planning, read-only project state detection, MVP-first implementation, patch proposal, testing, review
+- Development Mode: code planning, read-only project state detection, MVP-first implementation, patch proposal, patch preview, testing, review
 - Bug Bounty Mode: authorized web security review planning, scope control, MoochackerAgent safety assessment, endpoint mapping placeholders, evidence ledger scaffolding, report drafting
 
 ## Supporting Modes
@@ -102,7 +102,7 @@ Preview a persisted development patch proposal:
 corepack pnpm cli -- preview <run-id>
 ```
 
-The preview command is read-only. It loads `.dure/runs/<run-id>/`, prints the patch summary, proposed file changes, and verification summary, and does not approve, apply, or execute anything.
+The preview command is read-only. It loads `.dure/runs/<run-id>/`, prints the patch summary, risk assessment, file-level change plan, proposed unified diff, and verification summary, and does not approve, apply, or execute anything.
 
 Approve or reject a persisted patch proposal:
 
@@ -173,7 +173,7 @@ To inspect a persisted run in the prototype, generate a console snapshot and imp
 corepack pnpm cli -- console-data <run-id> --output .dure/runs/<run-id>/console-data.json
 ```
 
-The prototype is intentionally local-only. It does not call a backend, store run records, execute tools, scan targets, approve patches, apply files, or verify workspaces. Browser import uses a user-selected JSON file rather than direct filesystem access.
+Imported development snapshots can also show detected project state plus patch preview risk and file counts. The prototype is intentionally local-only. It does not call a backend, store run records, execute tools, scan targets, approve patches, apply files, or verify workspaces. Browser import uses a user-selected JSON file rather than direct filesystem access.
 
 ## Example Output Shape
 
@@ -216,6 +216,16 @@ Patch:
   - status: accepted
   - risk: high
   - approval required: yes
+
+Patch Risk:
+  - overall risk: high
+  - separate approval required: yes
+
+File-Level Change Plan:
+  - package.json: modify, medium risk
+
+Unified Diff:
+  diff --git a/package.json b/package.json
 ```
 
 Approval example:
@@ -340,7 +350,7 @@ packages/intent-router   Deterministic task mode classification
 packages/task-modes      Mode-specific deterministic proposal builders
 packages/orchestrator    Development mode intent, MVP ladder, council, verification
 packages/council         Deterministic mock reviewer agents
-packages/builder-runtime Single-writer patch proposal runtime
+packages/builder-runtime Single-writer patch proposal runtime and preview metadata
 packages/verifier        Verification gate interfaces and local scans
 packages/safety-policy   Mode capability policy and stop-condition engine
 packages/skill-registry  Previewable skill manifest registry
@@ -370,6 +380,7 @@ examples/                Future example projects
 - Agent reasoning is deterministic and rule-based.
 - Task mode routing is keyword/signal based.
 - Development project state detection is static and local; it reads manifests, lockfiles, file names, and package scripts but does not execute scripts.
+- Development patch previews are proposal-generated; modify/delete diffs use placeholders instead of reading existing file content.
 - Safety policy evaluation is deterministic and local; policy configuration is not user-editable yet.
 - Run export produces a local redacted Markdown summary; richer export formats are not implemented yet.
 - MoochackerAgent produces structured bug bounty safety guidance only; active testing, target access, and external requests are not executed.

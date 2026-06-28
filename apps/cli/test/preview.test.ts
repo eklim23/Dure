@@ -26,6 +26,10 @@ test("preview command prints a persisted development patch", async () => {
   assert.match(result.stdout, /run status: proposed/);
   assert.match(result.stdout, /proposal: patch-cli-test/);
   assert.match(result.stdout, /create: package\.json/);
+  assert.match(result.stdout, /Patch Risk:/);
+  assert.match(result.stdout, /File-Level Change Plan:/);
+  assert.match(result.stdout, /Unified Diff:/);
+  assert.match(result.stdout, /diff --git a\/package\.json b\/package\.json/);
   assert.match(result.stdout, /accepted: yes/);
 });
 

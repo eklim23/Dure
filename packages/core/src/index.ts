@@ -256,6 +256,32 @@ export interface PatchChange {
   readonly content?: string;
 }
 
+export interface PatchChangePlan {
+  readonly path: string;
+  readonly operation: PatchOperation;
+  readonly purpose: string;
+  readonly expectedImpact: string;
+  readonly riskLevel: RiskLevel;
+  readonly requiresApproval: boolean;
+  readonly requiresSeparateApproval: boolean;
+  readonly reviewFocus: readonly string[];
+}
+
+export interface PatchRiskAssessment {
+  readonly overallRisk: RiskLevel;
+  readonly approvalRequired: boolean;
+  readonly separateApprovalRequired: boolean;
+  readonly reasons: readonly string[];
+}
+
+export interface PatchPreview {
+  readonly summary: string;
+  readonly changePlan: readonly PatchChangePlan[];
+  readonly riskAssessment: PatchRiskAssessment;
+  readonly unifiedDiff: string;
+  readonly generatedAt: string;
+}
+
 export interface PatchPolicy {
   readonly singleWriter: true;
   readonly writer: "BuilderAgent" | "BuilderRuntime";
@@ -270,6 +296,7 @@ export interface PatchProposal extends BaseProposal {
   readonly stage: MvpStage;
   readonly summary: string;
   readonly changes: readonly PatchChange[];
+  readonly preview?: PatchPreview;
   readonly policy: PatchPolicy;
   readonly createdAt: string;
   status: "proposed" | "accepted" | "rejected";
@@ -767,6 +794,12 @@ export interface ConsoleRunSnapshot {
       readonly operation: PatchOperation;
       readonly rationale: string;
     }[];
+    readonly patchPreview?: {
+      readonly summary: string;
+      readonly riskAssessment: PatchRiskAssessment;
+      readonly changePlan: readonly PatchChangePlan[];
+      readonly unifiedDiff: string;
+    };
     readonly approval?: ApprovalDecision;
     readonly appliedFiles: number;
   };
