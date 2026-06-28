@@ -30,7 +30,10 @@ import type {
   BugBountyReportDraftInput,
   BugBountyReportDraftRecord,
   BugBountySeverity,
+  BugBountyScopeBoundary,
+  BugBountyScopeCheck,
   BugBountyScopeIntake,
+  BugBountyScopeIntakeAssessment,
   BugBountyScopeRecord,
   ConsoleRunSnapshot,
   DecisionLog,
@@ -281,14 +284,17 @@ export class RunStore {
       throw new Error(`Run ${runId} already has a bug bounty scope intake.`);
     }
 
-    const scope = normalizeScope(input.scope);
+    const normalizedScope = normalizeScopeInput(input.scope);
+    const scope = normalizedScope.value;
+    const intakeAssessment = buildScopeIntakeAssessment(scope, normalizedScope.redactedFields);
     const scopePath = path.join(preview.artifactPaths.runDir, "scope.json");
     const record: BugBountyScopeRecord = {
       ...scope,
       runId,
       recordedBy: "user",
       createdAt: now.toISOString(),
-      moochackerAssessment: buildScopeMoochackerAssessment(scope)
+      intakeAssessment,
+      moochackerAssessment: buildScopeMoochackerAssessment(scope, intakeAssessment)
     };
 
     writeJson(scopePath, record);
@@ -300,6 +306,15 @@ export class RunStore {
         target: record.target,
         scopeStatus: record.moochackerAssessment.scopeStatus,
         safetyLevel: record.moochackerAssessment.safetyLevel,
+        intakeAssessment: {
+          status: record.intakeAssessment.status,
+          safetyLevel: record.intakeAssessment.safetyLevel,
+          missingFields: record.intakeAssessment.missingFields,
+          conflictWarnings: record.intakeAssessment.conflictWarnings,
+          blockedReasons: record.intakeAssessment.blockedReasons,
+          redactedFields: record.intakeAssessment.redactedFields,
+          nextAllowedActions: record.intakeAssessment.nextAllowedActions
+        },
         inScopeAssets: record.inScopeAssets,
         outOfScopeAssets: record.outOfScopeAssets,
         allowedTechniques: record.allowedTechniques,
@@ -1990,54 +2005,97 @@ function exportList(values: readonly string[]): string {
   return values.length > 0 ? values.map(redactedExportText).join(", ") : "none";
 }
 
-function normalizeScope(input: BugBountyScopeIntake): BugBountyScopeIntake {
+interface NormalizedScopeInput {
+  readonly value: BugBountyScopeIntake;
+  readonly redactedFields: readonly string[];
+}
+
+function normalizeScopeInput(input: BugBountyScopeIntake): NormalizedScopeInput {
+  const redactedFields = new Set<string>();
+  const target = redactScopeField("target", cleanRequiredString(input.target, "Scope target is required."), redactedFields);
+  const programRulesUrl = cleanOptionalString(input.programRulesUrl);
+  const value: BugBountyScopeIntake = {
+    target,
+    inScopeAssets: redactScopeList("inScopeAssets", cleanList(input.inScopeAssets), redactedFields),
+    outOfScopeAssets: redactScopeList("outOfScopeAssets", cleanList(input.outOfScopeAssets), redactedFields),
+    allowedTechniques: redactScopeList("allowedTechniques", cleanList(input.allowedTechniques), redactedFields),
+    forbiddenTechniques: redactScopeList("forbiddenTechniques", cleanList(input.forbiddenTechniques), redactedFields),
+    rateLimits: redactScopeList("rateLimits", cleanList(input.rateLimits), redactedFields),
+    testAccountRoles: redactScopeList("testAccountRoles", cleanList(input.testAccountRoles), redactedFields),
+    dataHandlingRules: redactScopeList("dataHandlingRules", cleanList(input.dataHandlingRules), redactedFields),
+    authorizationNote: redactScopeField("authorizationNote", cleanOptionalString(input.authorizationNote) ?? "", redactedFields),
+    programRulesUrl: programRulesUrl ? redactScopeField("programRulesUrl", programRulesUrl, redactedFields) : undefined
+  };
+
   return {
-    target: cleanRequiredString(input.target, "Scope target is required."),
-    inScopeAssets: cleanList(input.inScopeAssets),
-    outOfScopeAssets: cleanList(input.outOfScopeAssets),
-    allowedTechniques: cleanList(input.allowedTechniques),
-    forbiddenTechniques: cleanList(input.forbiddenTechniques),
-    rateLimits: cleanList(input.rateLimits),
-    testAccountRoles: cleanList(input.testAccountRoles),
-    dataHandlingRules: cleanList(input.dataHandlingRules),
-    authorizationNote: cleanOptionalString(input.authorizationNote) ?? "",
-    programRulesUrl: cleanOptionalString(input.programRulesUrl)
+    value,
+    redactedFields: [...redactedFields]
   };
 }
 
-function buildScopeMoochackerAssessment(scope: BugBountyScopeIntake): MoochackerAssessment {
-  const dangerousAllowed = scope.allowedTechniques.some((technique) => hasDangerousSignal(technique));
-  const missingClarifications = [
-    scope.inScopeAssets.length === 0 ? "Which exact assets are in scope?" : undefined,
-    scope.allowedTechniques.length === 0 ? "Which testing techniques are explicitly allowed?" : undefined,
-    scope.forbiddenTechniques.length === 0 ? "Which testing techniques are forbidden?" : undefined,
-    scope.rateLimits.length === 0 ? "What rate limits or automation limits apply?" : undefined,
-    scope.testAccountRoles.length === 0 ? "Which test account roles are authorized?" : undefined,
-    scope.dataHandlingRules.length === 0 ? "What data handling and redaction rules apply?" : undefined,
-    scope.authorizationNote.length === 0 ? "What note confirms authorization or safe harbor?" : undefined
-  ].filter((question): question is string => question !== undefined);
-  const scopeStatus = dangerousAllowed
+function buildScopeIntakeAssessment(
+  scope: BugBountyScopeIntake,
+  redactedFields: readonly string[]
+): BugBountyScopeIntakeAssessment {
+  const checks = buildScopeChecks(scope, redactedFields);
+  const missingFields = checks
+    .filter((check) => check.status === "missing")
+    .map((check) => check.id);
+  const blockedReasons = checks
+    .filter((check) => check.status === "blocked")
+    .map((check) => check.summary);
+  const conflictWarnings = checks
+    .filter((check) => check.status === "warning")
+    .map((check) => check.summary);
+  const status = blockedReasons.length > 0
     ? "out_of_scope"
-    : missingClarifications.length > 0
+    : missingFields.length > 0
       ? "needs_clarification"
       : "sufficient";
-  const safetyLevel = dangerousAllowed ? "blocked" : "caution";
+  const safetyLevel = status === "out_of_scope" ? "blocked" : status === "sufficient" ? "safe" : "caution";
+
+  return {
+    status,
+    safetyLevel,
+    passiveOnly: true,
+    authorizationPresent: scope.authorizationNote.length > 0,
+    programRulesPresent: scope.programRulesUrl !== undefined,
+    missingFields,
+    conflictWarnings,
+    blockedReasons,
+    redactedFields,
+    checks,
+    boundaries: buildScopeBoundaries(scope),
+    nextAllowedActions: scopeNextAllowedActions(status),
+    blockedUntilClarified: status !== "sufficient"
+  };
+}
+
+function buildScopeMoochackerAssessment(
+  scope: BugBountyScopeIntake,
+  assessment: BugBountyScopeIntakeAssessment
+): MoochackerAssessment {
+  const missingClarifications = scopeClarifyingQuestions(assessment);
+  const safetyLevel = assessment.safetyLevel;
 
   return {
     agent: "MoochackerAgent",
     mode: "bug_bounty",
-    scopeStatus,
+    scopeStatus: assessment.status,
     safetyLevel,
     allowedActions:
       safetyLevel === "blocked"
-        ? ["Passive scope clarification only.", "Record the unsafe allowed-technique conflict before proceeding."]
-        : [
+        ? ["Passive scope clarification only.", "Record blocked scope reasons before proceeding."]
+        : assessment.status === "needs_clarification"
+          ? ["Answer clarifying questions before evidence collection.", "Record blocked evidence entries only until scope is sufficient."]
+          : [
             "Use only the user-provided in-scope assets.",
             "Plan tests only from the explicitly allowed techniques.",
             "Keep all work passive until a later approved execution stage."
           ],
     blockedActions: [
       ...scope.forbiddenTechniques.map((technique) => `Forbidden by scope: ${technique}`),
+      ...assessment.blockedReasons,
       "No real HTTP requests, scanners, exploit execution, or active testing in this intake step.",
       "No scope expansion beyond user-provided assets.",
       "No credentials, secrets, or personal data should be stored in scope intake."
@@ -2059,6 +2117,173 @@ function buildScopeMoochackerAssessment(scope: BugBountyScopeIntake): Moochacker
       "Include remediation guidance without overstating confidence."
     ]
   };
+}
+
+function buildScopeChecks(
+  scope: BugBountyScopeIntake,
+  redactedFields: readonly string[]
+): readonly BugBountyScopeCheck[] {
+  const conflicts = scopeConflicts(scope);
+  const dangerousAllowed = scope.allowedTechniques.filter((technique) => hasDangerousSignal(technique));
+  return [
+    scopePresenceCheck("target", scope.target.length > 0, "Target or program name is recorded."),
+    scopePresenceCheck("inScopeAssets", scope.inScopeAssets.length > 0, "In-scope assets are recorded."),
+    scopePresenceCheck("outOfScopeAssets", scope.outOfScopeAssets.length > 0, "Out-of-scope assets are recorded."),
+    scopePresenceCheck("allowedTechniques", scope.allowedTechniques.length > 0, "Allowed techniques are recorded."),
+    scopePresenceCheck("forbiddenTechniques", scope.forbiddenTechniques.length > 0, "Forbidden techniques are recorded."),
+    scopePresenceCheck("rateLimits", scope.rateLimits.length > 0, "Rate or automation limits are recorded."),
+    scopePresenceCheck("testAccountRoles", scope.testAccountRoles.length > 0, "Authorized test account roles are recorded."),
+    scopePresenceCheck("dataHandlingRules", scope.dataHandlingRules.length > 0, "Data handling and redaction rules are recorded."),
+    scopePresenceCheck("authorizationNote", scope.authorizationNote.length > 0, "Authorization or safe harbor note is recorded."),
+    {
+      id: "programRulesUrl",
+      status: scope.programRulesUrl ? "passed" : "warning",
+      summary: scope.programRulesUrl
+        ? "Program rules URL is recorded."
+        : "Program rules URL is not recorded; keep using the authorization note as the source of truth."
+    },
+    {
+      id: "dangerousAllowedTechniques",
+      status: dangerousAllowed.length === 0 ? "passed" : "blocked",
+      summary: dangerousAllowed.length === 0
+        ? "Allowed techniques do not contain known destructive or disruptive signals."
+        : `Allowed techniques include blocked signals: ${dangerousAllowed.join(", ")}.`
+    },
+    {
+      id: "scopeConflicts",
+      status: conflicts.length === 0 ? "passed" : "warning",
+      summary: conflicts.length === 0
+        ? "No exact in-scope/out-of-scope asset conflicts were detected."
+        : `Potential scope conflicts: ${conflicts.join(", ")}.`
+    },
+    {
+      id: "redaction",
+      status: redactedFields.length === 0 ? "passed" : "warning",
+      summary: redactedFields.length === 0
+        ? "No secret-like values were found in scope intake fields."
+        : `Secret-like values were redacted from: ${redactedFields.join(", ")}.`
+    }
+  ];
+}
+
+function scopePresenceCheck(id: string, present: boolean, passedSummary: string): BugBountyScopeCheck {
+  return {
+    id,
+    status: present ? "passed" : "missing",
+    summary: present ? passedSummary : `${id} is required before Bug Bounty Mode can move beyond passive planning.`
+  };
+}
+
+function buildScopeBoundaries(scope: BugBountyScopeIntake): readonly BugBountyScopeBoundary[] {
+  return [
+    classifyScopeBoundary("target", scope.target),
+    ...scope.inScopeAssets.map((asset) => classifyScopeBoundary("in_scope", asset)),
+    ...scope.outOfScopeAssets.map((asset) => classifyScopeBoundary("out_of_scope", asset))
+  ];
+}
+
+function classifyScopeBoundary(source: BugBountyScopeBoundary["source"], value: string): BugBountyScopeBoundary {
+  const normalizedValue = normalizeBoundaryValue(value);
+  return {
+    source,
+    kind: boundaryKind(value),
+    value,
+    normalizedValue
+  };
+}
+
+function boundaryKind(value: string): BugBountyScopeBoundary["kind"] {
+  const normalized = value.trim();
+  if (/^https?:\/\//i.test(normalized)) {
+    return "url";
+  }
+  if (normalized.includes("*")) {
+    return "wildcard";
+  }
+  if (normalized.startsWith("/")) {
+    return "path";
+  }
+  if (/^[a-z0-9.-]+(?::\d+)?$/i.test(normalized)) {
+    return "host";
+  }
+  return "other";
+}
+
+function normalizeBoundaryValue(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return trimmed.replace(/\/+$/, "");
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return trimmed;
+  }
+}
+
+function scopeConflicts(scope: BugBountyScopeIntake): readonly string[] {
+  const out = new Set(scope.outOfScopeAssets.map(normalizeBoundaryValue));
+  return scope.inScopeAssets
+    .filter((asset) => out.has(normalizeBoundaryValue(asset)))
+    .map((asset) => normalizeBoundaryValue(asset));
+}
+
+function scopeNextAllowedActions(status: BugBountyScopeIntakeAssessment["status"]): readonly string[] {
+  if (status === "out_of_scope") {
+    return ["Record blocked scope notes only.", "Clarify authorization, allowed techniques, and rules before evidence."];
+  }
+  if (status === "needs_clarification") {
+    return ["Answer MoochackerAgent clarifying questions.", "Record only blocked evidence entries until scope is sufficient."];
+  }
+  return [
+    "Build a passive target map from user-supplied assets only.",
+    "Record hypotheses and evidence placeholders without contacting targets.",
+    "Draft reports only from scoped, redacted evidence."
+  ];
+}
+
+function scopeClarifyingQuestions(assessment: BugBountyScopeIntakeAssessment): readonly string[] {
+  const missingQuestions = assessment.missingFields.map((field) => {
+    switch (field) {
+      case "inScopeAssets":
+        return "Which exact assets are in scope?";
+      case "outOfScopeAssets":
+        return "Which assets are explicitly out of scope?";
+      case "allowedTechniques":
+        return "Which testing techniques are explicitly allowed?";
+      case "forbiddenTechniques":
+        return "Which testing techniques are forbidden?";
+      case "rateLimits":
+        return "What rate limits or automation limits apply?";
+      case "testAccountRoles":
+        return "Which test account roles are authorized?";
+      case "dataHandlingRules":
+        return "What data handling and redaction rules apply?";
+      case "authorizationNote":
+        return "What note confirms authorization or safe harbor?";
+      default:
+        return `Please clarify ${field}.`;
+    }
+  });
+
+  return [
+    ...missingQuestions,
+    ...assessment.conflictWarnings,
+    ...assessment.blockedReasons
+  ];
+}
+
+function redactScopeField(field: string, value: string, redactedFields: Set<string>): string {
+  const redacted = redactEvidenceText(value);
+  if (redacted.redacted) {
+    redactedFields.add(field);
+  }
+  return redacted.value;
+}
+
+function redactScopeList(field: string, values: readonly string[], redactedFields: Set<string>): readonly string[] {
+  return values.map((value, index) => redactScopeField(`${field}[${index}]`, value, redactedFields));
 }
 
 function cleanRequiredString(value: string, errorMessage: string): string {

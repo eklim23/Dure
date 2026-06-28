@@ -590,10 +590,46 @@ export interface BugBountyScopeIntake {
   readonly programRulesUrl?: string;
 }
 
+export type BugBountyScopeCheckStatus = "passed" | "missing" | "warning" | "blocked";
+
+export interface BugBountyScopeCheck {
+  readonly id: string;
+  readonly status: BugBountyScopeCheckStatus;
+  readonly summary: string;
+}
+
+export type BugBountyScopeBoundaryKind = "host" | "path" | "url" | "wildcard" | "other";
+
+export type BugBountyScopeBoundarySource = "target" | "in_scope" | "out_of_scope";
+
+export interface BugBountyScopeBoundary {
+  readonly source: BugBountyScopeBoundarySource;
+  readonly kind: BugBountyScopeBoundaryKind;
+  readonly value: string;
+  readonly normalizedValue: string;
+}
+
+export interface BugBountyScopeIntakeAssessment {
+  readonly status: BugBountyScopeStatus;
+  readonly safetyLevel: MoochackerSafetyLevel;
+  readonly passiveOnly: true;
+  readonly authorizationPresent: boolean;
+  readonly programRulesPresent: boolean;
+  readonly missingFields: readonly string[];
+  readonly conflictWarnings: readonly string[];
+  readonly blockedReasons: readonly string[];
+  readonly redactedFields: readonly string[];
+  readonly checks: readonly BugBountyScopeCheck[];
+  readonly boundaries: readonly BugBountyScopeBoundary[];
+  readonly nextAllowedActions: readonly string[];
+  readonly blockedUntilClarified: boolean;
+}
+
 export interface BugBountyScopeRecord extends BugBountyScopeIntake {
   readonly runId: string;
   readonly recordedBy: "user";
   readonly createdAt: string;
+  readonly intakeAssessment: BugBountyScopeIntakeAssessment;
   readonly moochackerAssessment: MoochackerAssessment;
 }
 

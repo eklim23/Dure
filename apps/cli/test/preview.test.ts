@@ -271,7 +271,15 @@ test("scope command records bug bounty scope intake", async () => {
   assert.match(result.stdout, /Dure Bug Bounty Scope/);
   assert.match(result.stdout, /target: api\.example\.com/);
   assert.match(result.stdout, /status: sufficient/);
+  assert.match(result.stdout, /safety: safe/);
   assert.match(result.stdout, /forbidden: DoS, brute force/);
+  assert.match(result.stdout, /Intake Assessment/);
+  assert.match(result.stdout, /missing fields: none/);
+  assert.match(result.stdout, /Scope Checks/);
+  assert.match(result.stdout, /passed: inScopeAssets/);
+  assert.match(result.stdout, /Boundaries/);
+  assert.match(result.stdout, /in_scope: host api\.example\.com -> api\.example\.com/);
+  assert.match(result.stdout, /Next Allowed/);
 });
 
 test("evidence command records and lists bug bounty evidence leads", async () => {

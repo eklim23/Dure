@@ -17,7 +17,7 @@
 - Approval Gate for patch proposals with risk confirmation, policy checklist, and expiration metadata
 - Controlled apply into a safe workspace with preflight checks and rollback metadata
 - Applied workspace verification with allow-listed package scripts, structured gates, and output artifact summaries
-- Minimal bug bounty scope intake persistence
+- Bug bounty scope intake persistence with checklist assessment, boundary classification, and redaction metadata
 - Bug bounty evidence ledger persistence with redaction
 - Bug bounty report draft markdown export
 - Safety policy engine with mode capability allowlists and stop conditions

@@ -573,10 +573,88 @@ test("run store records bug bounty scope intake", async () => {
   const preview = store.loadPreview(record.id);
 
   assert.equal(scope.moochackerAssessment.scopeStatus, "sufficient");
+  assert.equal(scope.intakeAssessment.status, "sufficient");
+  assert.equal(scope.intakeAssessment.safetyLevel, "safe");
+  assert.equal(scope.intakeAssessment.blockedUntilClarified, false);
+  assert.equal(scope.intakeAssessment.missingFields.length, 0);
+  assert.ok(scope.intakeAssessment.checks.every((check) => check.status === "passed" || check.status === "warning"));
+  assert.ok(scope.intakeAssessment.boundaries.some((boundary) => boundary.source === "in_scope" && boundary.kind === "host"));
   assert.equal(preview.bugBountyScope?.target, "api.example.com");
+  assert.equal(preview.bugBountyScope?.intakeAssessment.status, "sufficient");
   assert.ok(preview.artifactPaths.scope);
   assert.ok(existsSync(preview.artifactPaths.scope));
   assert.equal(preview.decisionLog.entries.at(-1)?.type, "bug_bounty_scope_intake");
+});
+
+test("run store records scope clarification and redaction assessment", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-scope-redaction-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:11.000Z")
+  });
+
+  const scope = store.attachBugBountyScope(record.id, {
+    scope: {
+      target: "api.example.com",
+      inScopeAssets: ["api.example.com"],
+      outOfScopeAssets: ["api.example.com"],
+      allowedTechniques: ["read-only authorization checks"],
+      forbiddenTechniques: [],
+      rateLimits: [],
+      testAccountRoles: [],
+      dataHandlingRules: ["redact token=supersecretvalue123"],
+      authorizationNote: "Program scope supplied by user.",
+      programRulesUrl: "https://example.com/program?token=supersecretvalue123"
+    },
+    now: new Date("2026-06-27T00:00:12.000Z")
+  });
+
+  assert.equal(scope.intakeAssessment.status, "needs_clarification");
+  assert.equal(scope.intakeAssessment.safetyLevel, "caution");
+  assert.ok(scope.intakeAssessment.missingFields.includes("forbiddenTechniques"));
+  assert.ok(scope.intakeAssessment.conflictWarnings.some((warning) => warning.includes("api.example.com")));
+  assert.ok(scope.intakeAssessment.redactedFields.includes("dataHandlingRules[0]"));
+  assert.ok(scope.intakeAssessment.redactedFields.includes("programRulesUrl"));
+  assert.match(scope.dataHandlingRules.join("\n"), /\[redacted-secret\]/);
+  assert.match(scope.programRulesUrl ?? "", /\[redacted-secret\]/);
+  assert.ok(scope.moochackerAssessment.clarifyingQuestions.length > 0);
+});
+
+test("run store blocks dangerous allowed bug bounty scope techniques", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-scope-blocked-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:13.000Z")
+  });
+
+  const scope = store.attachBugBountyScope(record.id, {
+    scope: {
+      ...sufficientScopeFixture(),
+      allowedTechniques: ["read-only checks", "DoS testing"]
+    },
+    now: new Date("2026-06-27T00:00:14.000Z")
+  });
+
+  assert.equal(scope.intakeAssessment.status, "out_of_scope");
+  assert.equal(scope.intakeAssessment.safetyLevel, "blocked");
+  assert.ok(scope.intakeAssessment.blockedReasons.some((reason) => reason.includes("DoS testing")));
+  assert.equal(scope.moochackerAssessment.safetyLevel, "blocked");
+  assert.throws(
+    () => store.recordBugBountyEvidence(record.id, { evidence: evidenceFixture({ status: "blocked" }) }),
+    /scope safety as blocked/
+  );
 });
 
 test("run store records bug bounty evidence ledger entries with redaction", async () => {

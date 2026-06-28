@@ -1030,12 +1030,34 @@ function printScope(record: BugBountyScopeRecord): void {
     `authorization: ${record.authorizationNote || "not provided"}`,
     `program rules: ${record.programRulesUrl ?? "not provided"}`
   ]);
+  section("Intake Assessment", [
+    `status: ${record.intakeAssessment.status}`,
+    `safety: ${record.intakeAssessment.safetyLevel}`,
+    `passive only: ${record.intakeAssessment.passiveOnly ? "yes" : "no"}`,
+    `authorization present: ${record.intakeAssessment.authorizationPresent ? "yes" : "no"}`,
+    `program rules present: ${record.intakeAssessment.programRulesPresent ? "yes" : "no"}`,
+    `missing fields: ${formatList(record.intakeAssessment.missingFields)}`,
+    `conflicts: ${formatList(record.intakeAssessment.conflictWarnings)}`,
+    `blocked reasons: ${formatList(record.intakeAssessment.blockedReasons)}`,
+    `redacted fields: ${formatList(record.intakeAssessment.redactedFields)}`
+  ]);
+  section(
+    "Scope Checks",
+    record.intakeAssessment.checks.map((check) => `${check.status}: ${check.id} - ${check.summary}`)
+  );
+  section(
+    "Boundaries",
+    record.intakeAssessment.boundaries.map((boundary) =>
+      `${boundary.source}: ${boundary.kind} ${boundary.value} -> ${boundary.normalizedValue}`
+    )
+  );
   section(
     "Moochacker",
     record.moochackerAssessment.clarifyingQuestions.length > 0
       ? record.moochackerAssessment.clarifyingQuestions
       : ["Scope intake is sufficient for passive planning."]
   );
+  section("Next Allowed", record.intakeAssessment.nextAllowedActions);
 }
 
 function printEvidenceRecord(record: BugBountyEvidenceRecord): void {

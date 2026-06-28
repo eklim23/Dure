@@ -138,7 +138,7 @@ Before scope is known, Dure should continue with passive planning only.
 
 The Safety Policy engine blocks active testing stop-condition signals such as denial-of-service, brute force, rate-limit bypass, persistence, destructive testing, out-of-scope testing, and unauthorized access. External bug bounty capabilities remain placeholder-only until an explicit approval and adapter layer exists.
 
-Scope intake is persisted as `.dure/runs/<run-id>/scope.json`. It stores only user-provided assets, rules, roles, and data handling expectations. It does not discover endpoints, infer related targets, contact hosts, run scanners, or store credentials.
+Scope intake is persisted as `.dure/runs/<run-id>/scope.json`. It stores only user-provided assets, rules, roles, and data handling expectations. It also records a passive intake assessment with required-field checks, exact in/out-of-scope conflict warnings, dangerous allowed-technique blocks, boundary classification, next allowed passive actions, and redaction metadata. It does not discover endpoints, infer related targets, contact hosts, run scanners, or store credentials.
 
 Evidence ledger entries are persisted as `.dure/runs/<run-id>/evidence-ledger.jsonl`. Each entry stores a lead id, status, asset, endpoint, method, role, hypothesis, request/response placeholders, impact, confidence, scope note, program rule notes, and next action. Dure applies local redaction before writing the ledger and does not validate or reproduce the lead in v0.1.
 

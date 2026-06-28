@@ -137,7 +137,7 @@ Record bug bounty scope intake:
 corepack pnpm cli -- scope <run-id> --target "api.example.com" --in-scope "api.example.com,/v1/*" --out-of-scope "admin.example.com" --allowed "read-only authorization checks" --forbidden "DoS,brute force" --rate-limit "10 requests per minute" --roles "user,admin-test" --data "redact tokens and personal data" --authorization-note "Program scope supplied by user"
 ```
 
-Scope intake writes `.dure/runs/<run-id>/scope.json`, records MoochackerAgent's passive scope assessment, and never contacts the target.
+Scope intake writes `.dure/runs/<run-id>/scope.json`, records MoochackerAgent's passive scope assessment, stores an intake checklist, classifies target boundaries, redacts secret-like scope fields, and never contacts the target.
 
 Record or list bug bounty evidence leads:
 
@@ -252,9 +252,17 @@ Dure Bug Bounty Scope
 
 Scope:
   - status: sufficient
-  - safety: caution
+  - safety: safe
   - in scope: api.example.com, /v1/*
   - forbidden: DoS, brute force
+
+Intake Assessment:
+  - missing fields: none
+  - blocked reasons: none
+  - redacted fields: none
+
+Boundaries:
+  - in_scope: host api.example.com -> api.example.com
 ```
 
 Bug bounty evidence example:
@@ -406,6 +414,7 @@ examples/                Future example projects
 - MoochackerAgent produces structured bug bounty safety guidance only; active testing, target access, and external requests are not executed.
 - Bug bounty evidence records are user-supplied ledger entries; Dure does not prove, reproduce, or actively test findings in v0.1.
 - Bug bounty report drafts are generated from stored evidence only; Dure does not validate findings, submit reports, or contact targets.
+- Bug bounty scope intake assessment is passive and local; it classifies user-supplied boundaries but does not discover related assets.
 - Approval records are durable gates for later controlled apply; approval itself does not modify files and expires before stale apply operations.
 - Controlled apply writes only approved patch content into a controlled workspace after preflight checks and records rollback metadata, but rollback execution is not implemented yet.
 - Proposal-time test, lint, and typecheck checks are placeholders.
