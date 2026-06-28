@@ -7,10 +7,13 @@
 ## 보여주는 것
 
 - 사용자는 Dure와 대화하고, Dure가 선택된 에이전트에게 전달하는 구조
-- 에이전트별 설정 미리보기
+- 가운데 `Dure에게 말하기` 채팅 입력
+- 오른쪽 `에이전트 회의 보기` 회의록
+- 에이전트별 이름, 역할, 자동 발언, 참여도, 응답 톤, 권한 설정
+- 에이전트 색상과 생김새 설정
 - Development Mode의 초록 작업 상태
 - Bug Bounty Mode의 빨간 보안 상태
-- 형태가 다른 움직이는 agent dot
+- 정돈된 배지 형태의 움직이는 agent dot
 - 선택한 에이전트 기준의 논의 transcript
 - redacted `dure console-data` JSON snapshot import
 - 실행 기록, 프로젝트 상태, patch preview risk 요약

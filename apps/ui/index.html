@@ -9,7 +9,7 @@
   </head>
   <body>
     <main id="app" class="shell" data-mode="development">
-      <header class="topbar" aria-label="Dure console header">
+      <header class="topbar" aria-label="Dure 콘솔 상단">
         <div class="brand-lockup">
           <span class="brand-mark" aria-hidden="true">D</span>
           <div>
@@ -31,45 +31,46 @@
 
       <section class="status-strip" aria-label="현재 상태">
         <div>
-          <span class="strip-label">현재 모드</span>
-          <strong id="mode-title">개발 모드</strong>
+          <span class="strip-label">대화 상대</span>
+          <strong id="mode-title">Dure 조율자</strong>
         </div>
         <div>
-          <span class="strip-label">현재 단계</span>
-          <strong id="stage-title">UI Prototype</strong>
+          <span class="strip-label">현재 모드</span>
+          <strong id="stage-title">개발 모드</strong>
         </div>
         <div>
           <span class="strip-label">안전 상태</span>
           <strong>읽기 전용 미리보기</strong>
         </div>
         <div>
-          <span class="strip-label">PM Gate</span>
-          <strong>정적 화면 승인</strong>
+          <span class="strip-label">회의 보기</span>
+          <strong id="meeting-status">PMAgent 검토 중</strong>
         </div>
       </section>
 
       <div class="control-room">
-        <aside class="agent-panel" aria-label="에이전트 선택과 설정">
-          <section class="panel-block">
-            <div class="panel-heading">
-              <p class="eyebrow">Agent</p>
-              <h2>에이전트 선택</h2>
-            </div>
-            <div id="agent-list" class="agent-list" role="listbox" aria-label="에이전트 선택"></div>
-          </section>
-
-          <section class="panel-block settings-panel" aria-label="에이전트 설정">
+        <aside class="agent-panel" aria-label="에이전트 설정">
+          <section class="panel-block settings-panel" aria-label="선택된 에이전트 설정">
             <div class="panel-heading">
               <p class="eyebrow">Settings</p>
               <h2>에이전트 설정</h2>
             </div>
             <div class="selected-agent-card">
-              <span id="setting-agent-mark" class="agent-glyph shape-circle" aria-hidden="true"></span>
+              <span id="setting-agent-mark" class="agent-glyph avatar-circle" aria-hidden="true">PM</span>
               <div>
                 <strong id="setting-agent-name">PMAgent</strong>
                 <span id="setting-agent-role">제품 관리자</span>
               </div>
             </div>
+
+            <label class="field-row">
+              <span>이름</span>
+              <input id="setting-display-name" type="text" maxlength="28" autocomplete="off">
+            </label>
+            <label class="field-row">
+              <span>역할</span>
+              <input id="setting-role" type="text" maxlength="36" autocomplete="off">
+            </label>
             <label class="toggle-row">
               <input id="setting-autospeak" type="checkbox">
               <span>회의에서 자동 발언</span>
@@ -79,7 +80,7 @@
               <input id="setting-participation" type="range" min="0" max="100" step="5">
               <strong id="setting-participation-value">70%</strong>
             </label>
-            <label class="control-row">
+            <label class="field-row">
               <span>응답 톤</span>
               <select id="setting-tone">
                 <option value="balanced">균형</option>
@@ -88,7 +89,7 @@
                 <option value="security">보안 중심</option>
               </select>
             </label>
-            <label class="control-row">
+            <label class="field-row">
               <span>권한</span>
               <select id="setting-authority">
                 <option value="advise">조언</option>
@@ -97,15 +98,37 @@
                 <option value="approve">PM 승인</option>
               </select>
             </label>
+            <label class="field-row">
+              <span>생김새</span>
+              <select id="setting-avatar">
+                <option value="circle">원형</option>
+                <option value="square">사각</option>
+                <option value="diamond">다이아</option>
+                <option value="hex">육각</option>
+                <option value="capsule">캡슐</option>
+              </select>
+            </label>
+            <div class="color-control" aria-label="에이전트 색상">
+              <span>색상</span>
+              <div id="color-swatches" class="color-swatches"></div>
+            </div>
+          </section>
+
+          <section class="panel-block" aria-label="에이전트 선택">
+            <div class="panel-heading">
+              <p class="eyebrow">Agents</p>
+              <h2>에이전트 선택</h2>
+            </div>
+            <div id="agent-list" class="agent-list" role="listbox" aria-label="에이전트 선택"></div>
           </section>
         </aside>
 
-        <section class="conversation-column" aria-label="Dure 대화 영역">
+        <section class="conversation-column" aria-label="Dure 채팅">
           <section class="chat-panel">
             <div class="conversation-header">
               <div>
-                <p class="eyebrow">Current Conversation</p>
-                <h2 id="conversation-target">현재 대화 상대: Dure 조율자</h2>
+                <p class="eyebrow">Chat</p>
+                <h2 id="conversation-target">채팅 위치: Dure에게 말하기</h2>
               </div>
               <span id="talk-route" class="route-pill">나 → Dure → PMAgent</span>
             </div>
@@ -124,11 +147,14 @@
               </div>
             </div>
             <div id="dialogue-list" class="dialogue-list" aria-live="polite"></div>
-            <div class="composer-preview" aria-label="입력 대상">
-              <span>입력 대상</span>
-              <strong>Dure</strong>
-              <p id="agent-focus">사용자 요청을 Dure가 받아 에이전트 회의로 전달합니다.</p>
-            </div>
+            <form id="chat-form" class="chat-form" aria-label="Dure에게 말하기">
+              <label for="chat-input">Dure에게 말하기</label>
+              <textarea id="chat-input" rows="3" placeholder="예: 이 기능을 MVP로 줄이면 다음 단계가 뭐야?"></textarea>
+              <div class="chat-actions">
+                <p id="agent-focus">입력은 로컬 미리보기로만 반영됩니다. 실행, 저장, 외부 전송은 하지 않습니다.</p>
+                <button type="submit">보내기</button>
+              </div>
+            </form>
           </section>
 
           <section class="snapshot-panel" aria-label="실행 기록 불러오기">
@@ -179,25 +205,29 @@
           </section>
         </section>
 
-        <aside class="council-column" aria-label="에이전트 회의">
-          <section class="council-board" id="agent-field">
+        <aside class="council-column" aria-label="에이전트 회의 보기">
+          <section class="council-notes" aria-label="에이전트 회의 보기">
+            <div class="conversation-header">
+              <div>
+                <p class="eyebrow">Agent Council</p>
+                <h2 id="conversation-title">에이전트 회의 보기</h2>
+              </div>
+              <span class="simulation-pill">정적 회의록</span>
+            </div>
+            <div class="meeting-route">
+              <span>회의 경로</span>
+              <strong id="meeting-route">Dure가 PMAgent에게 검토 요청</strong>
+            </div>
+            <div id="conversation-list" class="conversation-list"></div>
+          </section>
+
+          <section class="council-board" id="agent-field" aria-label="에이전트 활동 보드">
             <div class="field-grid" aria-hidden="true"></div>
             <div class="dure-core" aria-label="Dure coordination core">
               <span>Dure</span>
               <small id="core-mode">개발 모드</small>
             </div>
             <div id="agent-nodes" class="agent-nodes"></div>
-          </section>
-
-          <section class="council-notes" aria-label="에이전트 논의">
-            <div class="conversation-header">
-              <div>
-                <p class="eyebrow">Agent Council</p>
-                <h2 id="conversation-title">선택된 에이전트의 논의</h2>
-              </div>
-              <span class="simulation-pill">정적 transcript</span>
-            </div>
-            <div id="conversation-list" class="conversation-list"></div>
           </section>
         </aside>
       </div>
