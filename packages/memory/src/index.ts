@@ -35,6 +35,13 @@ import type {
   BugBountyScopeIntake,
   BugBountyScopeIntakeAssessment,
   BugBountyScopeRecord,
+  BugBountyTargetEndpointInput,
+  BugBountyTargetMapAssessment,
+  BugBountyTargetMapCheck,
+  BugBountyTargetMapFileFlow,
+  BugBountyTargetMapInput,
+  BugBountyTargetMapRecord,
+  BugBountyTargetMapRoleAccess,
   ConsoleRunSnapshot,
   DecisionLog,
   DecisionLogEntry,
@@ -104,6 +111,11 @@ export interface ApprovalDecisionInput {
 
 export interface AttachBugBountyScopeInput {
   readonly scope: BugBountyScopeIntake;
+  readonly now?: Date;
+}
+
+export interface AttachBugBountyTargetMapInput {
+  readonly targetMap: BugBountyTargetMapInput;
   readonly now?: Date;
 }
 
@@ -323,6 +335,65 @@ export class RunStore {
       timestamp: now.toISOString()
     } satisfies DecisionLogEntry);
     this.updateMetadata(preview, preview.metadata.status, now, { hasScope: true });
+
+    return record;
+  }
+
+  attachBugBountyTargetMap(runId: string, input: AttachBugBountyTargetMapInput): BugBountyTargetMapRecord {
+    const now = input.now ?? new Date();
+    const preview = this.loadPreview(runId);
+    if (preview.proposal.kind !== "bug_bounty_review") {
+      throw new Error(`Run ${runId} is not a bug bounty proposal (${preview.proposal.kind}).`);
+    }
+    if (preview.metadata.status !== "proposed") {
+      throw new Error(`Run ${runId} cannot accept a target map while status is ${preview.metadata.status}.`);
+    }
+    if (!preview.bugBountyScope) {
+      throw new Error(`Run ${runId} cannot record a target map before bug bounty scope intake is recorded.`);
+    }
+    if (preview.bugBountyScope.intakeAssessment.status !== "sufficient") {
+      throw new Error(`Run ${runId} cannot record a target map until scope intake is sufficient.`);
+    }
+    if (preview.artifactPaths.targetMap && existsSync(preview.artifactPaths.targetMap)) {
+      throw new Error(`Run ${runId} already has a bug bounty target map.`);
+    }
+
+    const normalized = normalizeTargetMapInput(input.targetMap);
+    const record: BugBountyTargetMapRecord = {
+      ...normalized.value,
+      id: createTargetMapId(now),
+      runId,
+      recordedBy: "user",
+      createdAt: now.toISOString(),
+      scopeTarget: preview.bugBountyScope.target,
+      endpoints: normalized.value.endpoints.map((endpoint, index) => ({
+        ...endpoint,
+        id: `endpoint-${String(index + 1).padStart(3, "0")}`
+      })),
+      assessment: buildTargetMapAssessment(normalized.value, preview.bugBountyScope, normalized.redactedFields)
+    };
+    const targetMapPath = path.join(preview.artifactPaths.runDir, "target-map.json");
+
+    writeJson(targetMapPath, record);
+    appendJsonLine(preview.artifactPaths.decisionLog, {
+      type: "bug_bounty_target_map_recorded",
+      message: "Bug bounty target map was recorded from passive, user-supplied artifacts.",
+      data: {
+        runId,
+        targetMapId: record.id,
+        scopeTarget: record.scopeTarget,
+        passiveOnly: record.assessment.passiveOnly,
+        noRequestsMade: record.assessment.noRequestsMade,
+        endpointCount: record.assessment.endpointCount,
+        stateChangingEndpoints: record.assessment.stateChangingEndpoints,
+        fileFlowEndpoints: record.assessment.fileFlowEndpoints,
+        outOfScopeReferences: record.assessment.outOfScopeReferences,
+        missingFields: record.assessment.missingFields,
+        redactedFields: record.assessment.redactedFields
+      },
+      timestamp: now.toISOString()
+    } satisfies DecisionLogEntry);
+    this.updateMetadata(preview, preview.metadata.status, now, { hasTargetMap: true });
 
     return record;
   }
@@ -709,6 +780,7 @@ export class RunStore {
       hasWorkspaceVerification: existsSync(path.join(runDir, "workspace-verification.json")),
       hasApproval: existsSync(path.join(runDir, "approval.json")),
       hasScope: existsSync(path.join(runDir, "scope.json")),
+      hasTargetMap: existsSync(path.join(runDir, "target-map.json")),
       hasEvidenceLedger: existsSync(path.join(runDir, "evidence-ledger.jsonl")),
       hasReports: existsSync(path.join(runDir, "reports")),
       hasExport: existsSync(path.join(runDir, "export.md")),
@@ -742,6 +814,9 @@ export class RunStore {
       : undefined;
     const bugBountyScope = artifactPaths.scope && existsSync(artifactPaths.scope)
       ? readJson<BugBountyScopeRecord>(artifactPaths.scope)
+      : undefined;
+    const bugBountyTargetMap = artifactPaths.targetMap && existsSync(artifactPaths.targetMap)
+      ? readJson<BugBountyTargetMapRecord>(artifactPaths.targetMap)
       : undefined;
     const bugBountyEvidenceLedger = artifactPaths.evidenceLedger && existsSync(artifactPaths.evidenceLedger)
       ? readEvidenceLedger(artifactPaths.evidenceLedger)
@@ -782,6 +857,7 @@ export class RunStore {
       workspaceVerificationRecord,
       approvalRecord,
       bugBountyScope,
+      bugBountyTargetMap,
       bugBountyEvidenceLedger,
       bugBountyReportDrafts,
       applyRecord,
@@ -895,6 +971,7 @@ export class RunStore {
     options: {
       readonly hasApproval?: boolean;
       readonly hasScope?: boolean;
+      readonly hasTargetMap?: boolean;
       readonly hasEvidenceLedger?: boolean;
       readonly hasReports?: boolean;
       readonly hasExport?: boolean;
@@ -911,6 +988,7 @@ export class RunStore {
         options.hasWorkspaceVerification ?? preview.artifactPaths.workspaceVerification !== undefined,
       hasApproval: options.hasApproval ?? preview.artifactPaths.approval !== undefined,
       hasScope: options.hasScope ?? preview.artifactPaths.scope !== undefined,
+      hasTargetMap: options.hasTargetMap ?? preview.artifactPaths.targetMap !== undefined,
       hasEvidenceLedger: options.hasEvidenceLedger ?? preview.artifactPaths.evidenceLedger !== undefined,
       hasReports: options.hasReports ?? preview.artifactPaths.reports !== undefined,
       hasExport: options.hasExport ?? preview.artifactPaths.export !== undefined,
@@ -1078,6 +1156,15 @@ export function createReportDraftId(now = new Date()): string {
   return `report-${timestamp}-${randomBytes(3).toString("hex")}`;
 }
 
+export function createTargetMapId(now = new Date()): string {
+  const timestamp = now
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}Z$/, "Z")
+    .replace("T", "-");
+  return `target-map-${timestamp}-${randomBytes(3).toString("hex")}`;
+}
+
 export function isSafeRunId(runId: string): boolean {
   return /^run-\d{8}-\d{6}Z-[0-9a-f]{6}$/.test(runId);
 }
@@ -1090,6 +1177,7 @@ function createArtifactPaths(
     readonly hasWorkspaceVerification?: boolean;
     readonly hasApproval?: boolean;
     readonly hasScope?: boolean;
+    readonly hasTargetMap?: boolean;
     readonly hasEvidenceLedger?: boolean;
     readonly hasReports?: boolean;
     readonly hasExport?: boolean;
@@ -1113,6 +1201,7 @@ function createArtifactPaths(
       : undefined,
     approval: normalized.hasApproval ? path.join(runDir, "approval.json") : undefined,
     scope: normalized.hasScope ? path.join(runDir, "scope.json") : undefined,
+    targetMap: normalized.hasTargetMap ? path.join(runDir, "target-map.json") : undefined,
     evidenceLedger: normalized.hasEvidenceLedger ? path.join(runDir, "evidence-ledger.jsonl") : undefined,
     reports: normalized.hasReports ? path.join(runDir, "reports") : undefined,
     export: normalized.hasExport ? path.join(runDir, "export.md") : undefined,
@@ -1786,6 +1875,8 @@ function buildConsoleSnapshot(preview: RunPreview, now: Date): ConsoleRunSnapsho
           target: preview.bugBountyScope?.target ? redactedExportText(preview.bugBountyScope.target) : undefined,
           scopeStatus: bugBountyAssessment?.scopeStatus,
           safetyLevel: bugBountyAssessment?.safetyLevel,
+          targetMapEndpoints: preview.bugBountyTargetMap?.assessment.endpointCount ?? 0,
+          targetMapStateChangingEndpoints: preview.bugBountyTargetMap?.assessment.stateChangingEndpoints ?? 0,
           evidenceLeads: preview.bugBountyEvidenceLedger?.entries.length ?? 0,
           reportDrafts: preview.bugBountyReportDrafts?.length ?? 0,
           stopConditions: proposal.kind === "bug_bounty_review" ? redactedConsoleList(proposal.stopConditions) : []
@@ -1796,6 +1887,7 @@ function buildConsoleSnapshot(preview: RunPreview, now: Date): ConsoleRunSnapsho
       hasApply: preview.applyRecord !== undefined,
       hasWorkspaceVerification: preview.workspaceVerificationRecord !== undefined,
       hasScope: preview.bugBountyScope !== undefined,
+      hasTargetMap: preview.bugBountyTargetMap !== undefined,
       hasEvidenceLedger: preview.bugBountyEvidenceLedger !== undefined,
       hasReports: (preview.bugBountyReportDrafts?.length ?? 0) > 0,
       hasMarkdownExport: preview.artifactPaths.export !== undefined,
@@ -2241,6 +2333,298 @@ function scopeNextAllowedActions(status: BugBountyScopeIntakeAssessment["status"
     "Record hypotheses and evidence placeholders without contacting targets.",
     "Draft reports only from scoped, redacted evidence."
   ];
+}
+
+interface NormalizedTargetMapInput {
+  readonly value: BugBountyTargetMapInput;
+  readonly redactedFields: readonly string[];
+}
+
+function normalizeTargetMapInput(input: BugBountyTargetMapInput): NormalizedTargetMapInput {
+  const redactedFields = new Set<string>();
+  const endpoints = input.endpoints.map((endpoint, index) => normalizeTargetEndpoint(endpoint, index, redactedFields));
+  const roleAccess = input.roleAccess.map((role, index) => normalizeTargetRoleAccess(role, index, redactedFields));
+  const notes = cleanOptionalString(input.notes);
+
+  return {
+    value: {
+      hosts: redactTargetMapList("hosts", cleanList(input.hosts), redactedFields),
+      applications: redactTargetMapList("applications", cleanList(input.applications), redactedFields),
+      apiBases: redactTargetMapList("apiBases", cleanList(input.apiBases), redactedFields),
+      authStates: redactTargetMapList("authStates", cleanList(input.authStates), redactedFields),
+      roleAccess,
+      endpoints,
+      fileFlows: redactTargetMapList("fileFlows", cleanList(input.fileFlows), redactedFields),
+      redirects: redactTargetMapList("redirects", cleanList(input.redirects), redactedFields),
+      thirdPartyIntegrations: redactTargetMapList(
+        "thirdPartyIntegrations",
+        cleanList(input.thirdPartyIntegrations),
+        redactedFields
+      ),
+      sourceArtifacts: redactTargetMapList("sourceArtifacts", cleanList(input.sourceArtifacts), redactedFields),
+      notes: notes ? redactTargetMapField("notes", notes, redactedFields) : undefined
+    },
+    redactedFields: [...redactedFields]
+  };
+}
+
+function normalizeTargetRoleAccess(
+  input: BugBountyTargetMapRoleAccess,
+  index: number,
+  redactedFields: Set<string>
+): BugBountyTargetMapRoleAccess {
+  const notes = cleanOptionalString(input.notes);
+  return {
+    role: redactTargetMapField(`roleAccess[${index}].role`, cleanRequiredString(input.role, "Role access role is required."), redactedFields),
+    authState: redactTargetMapField(
+      `roleAccess[${index}].authState`,
+      cleanRequiredString(input.authState, "Role access authState is required."),
+      redactedFields
+    ),
+    canAccess: redactTargetMapList(`roleAccess[${index}].canAccess`, cleanList(input.canAccess), redactedFields),
+    cannotAccess: redactTargetMapList(`roleAccess[${index}].cannotAccess`, cleanList(input.cannotAccess), redactedFields),
+    notes: notes ? redactTargetMapField(`roleAccess[${index}].notes`, notes, redactedFields) : undefined
+  };
+}
+
+function normalizeTargetEndpoint(
+  input: BugBountyTargetEndpointInput,
+  index: number,
+  redactedFields: Set<string>
+): BugBountyTargetEndpointInput {
+  const host = cleanOptionalString(input.host);
+  const apiBase = cleanOptionalString(input.apiBase);
+  const authState = cleanOptionalString(input.authState);
+  const notes = cleanOptionalString(input.notes);
+  return {
+    method: input.method,
+    host: host ? redactTargetMapField(`endpoints[${index}].host`, host, redactedFields) : undefined,
+    apiBase: apiBase ? redactTargetMapField(`endpoints[${index}].apiBase`, apiBase, redactedFields) : undefined,
+    path: redactTargetMapField(
+      `endpoints[${index}].path`,
+      cleanRequiredString(input.path, "Target map endpoint path is required."),
+      redactedFields
+    ),
+    parameters: redactTargetMapList(`endpoints[${index}].parameters`, cleanList(input.parameters), redactedFields),
+    authState: authState ? redactTargetMapField(`endpoints[${index}].authState`, authState, redactedFields) : undefined,
+    roles: redactTargetMapList(`endpoints[${index}].roles`, cleanList(input.roles), redactedFields),
+    stateChanging: input.stateChanging,
+    fileFlow: normalizeTargetMapFileFlow(input.fileFlow),
+    redirects: redactTargetMapList(`endpoints[${index}].redirects`, cleanList(input.redirects), redactedFields),
+    thirdPartyIntegrations: redactTargetMapList(
+      `endpoints[${index}].thirdPartyIntegrations`,
+      cleanList(input.thirdPartyIntegrations),
+      redactedFields
+    ),
+    notes: notes ? redactTargetMapField(`endpoints[${index}].notes`, notes, redactedFields) : undefined
+  };
+}
+
+function normalizeTargetMapFileFlow(value: BugBountyTargetMapFileFlow): BugBountyTargetMapFileFlow {
+  const normalized = String(value ?? "none").trim().toLowerCase().replace(/-/g, "_");
+  if (normalized === "upload" || normalized === "download" || normalized === "upload_download") {
+    return normalized;
+  }
+  return "none";
+}
+
+function buildTargetMapAssessment(
+  targetMap: BugBountyTargetMapInput,
+  scope: BugBountyScopeRecord,
+  redactedFields: readonly string[]
+): BugBountyTargetMapAssessment {
+  const outOfScopeReferences = targetMapOutOfScopeReferences(targetMap, scope);
+  const checks = buildTargetMapChecks(targetMap, outOfScopeReferences, redactedFields);
+  const missingFields = checks.filter((check) => check.status === "missing").map((check) => check.id);
+  const thirdPartyIntegrationCount = new Set([
+    ...targetMap.thirdPartyIntegrations,
+    ...targetMap.endpoints.flatMap((endpoint) => endpoint.thirdPartyIntegrations)
+  ]).size;
+
+  return {
+    passiveOnly: true,
+    noRequestsMade: true,
+    scopeStatus: scope.intakeAssessment.status,
+    safetyLevel: outOfScopeReferences.length > 0 ? "blocked" : scope.intakeAssessment.safetyLevel,
+    missingFields,
+    outOfScopeReferences,
+    redactedFields,
+    checks,
+    endpointCount: targetMap.endpoints.length,
+    stateChangingEndpoints: targetMap.endpoints.filter((endpoint) => endpoint.stateChanging).length,
+    fileFlowEndpoints: targetMap.endpoints.filter((endpoint) => endpoint.fileFlow !== "none").length,
+    thirdPartyIntegrationCount,
+    nextRecommendedActions: targetMapNextActions(missingFields, outOfScopeReferences)
+  };
+}
+
+function buildTargetMapChecks(
+  targetMap: BugBountyTargetMapInput,
+  outOfScopeReferences: readonly string[],
+  redactedFields: readonly string[]
+): readonly BugBountyTargetMapCheck[] {
+  const unmarkedMutating = targetMap.endpoints.filter((endpoint) => isMutatingMethod(endpoint.method) && !endpoint.stateChanging);
+  const endpointsMissingAuth = targetMap.endpoints.filter((endpoint) => !endpoint.authState && endpoint.roles.length === 0);
+  return [
+    targetMapPresenceCheck("hosts", targetMap.hosts.length > 0, "Host inventory is recorded."),
+    targetMapPresenceCheck("applications", targetMap.applications.length > 0, "Application inventory is recorded."),
+    targetMapPresenceCheck("apiBases", targetMap.apiBases.length > 0, "API base inventory is recorded."),
+    targetMapPresenceCheck("authStates", targetMap.authStates.length > 0, "Authentication states are recorded."),
+    targetMapPresenceCheck("roleAccess", targetMap.roleAccess.length > 0, "Role access boundaries are recorded."),
+    targetMapPresenceCheck("endpoints", targetMap.endpoints.length > 0, "Endpoint map is recorded."),
+    targetMapPresenceCheck("sourceArtifacts", targetMap.sourceArtifacts.length > 0, "Source artifacts are recorded."),
+    {
+      id: "scope-boundary",
+      status: outOfScopeReferences.length === 0 ? "passed" : "blocked",
+      summary: outOfScopeReferences.length === 0
+        ? "No exact out-of-scope references were detected in the passive target map."
+        : `Out-of-scope references need clarification: ${outOfScopeReferences.join(", ")}.`
+    },
+    {
+      id: "passive-only",
+      status: "passed",
+      summary: "Target map was built from user-provided artifacts only; Dure made no requests."
+    },
+    {
+      id: "state-changing-actions",
+      status: unmarkedMutating.length === 0 ? "passed" : "warning",
+      summary: unmarkedMutating.length === 0
+        ? "State-changing endpoints are explicitly marked."
+        : `Mutating methods should be marked state-changing: ${unmarkedMutating.map(endpointLabel).join(", ")}.`
+    },
+    {
+      id: "endpoint-auth-context",
+      status: endpointsMissingAuth.length === 0 ? "passed" : "warning",
+      summary: endpointsMissingAuth.length === 0
+        ? "Mapped endpoints include auth state or role context."
+        : `Endpoints missing auth or role context: ${endpointsMissingAuth.map(endpointLabel).join(", ")}.`
+    },
+    {
+      id: "file-flows",
+      status: targetMap.fileFlows.length > 0 || targetMap.endpoints.some((endpoint) => endpoint.fileFlow !== "none")
+        ? "passed"
+        : "warning",
+      summary: targetMap.fileFlows.length > 0 || targetMap.endpoints.some((endpoint) => endpoint.fileFlow !== "none")
+        ? "File upload/download flows are recorded where known."
+        : "No file upload/download flows are recorded; confirm whether none exist."
+    },
+    {
+      id: "redaction",
+      status: redactedFields.length === 0 ? "passed" : "warning",
+      summary: redactedFields.length === 0
+        ? "No secret-like values were found in target map fields."
+        : `Secret-like values were redacted from: ${redactedFields.join(", ")}.`
+    }
+  ];
+}
+
+function targetMapPresenceCheck(id: string, present: boolean, passedSummary: string): BugBountyTargetMapCheck {
+  return {
+    id,
+    status: present ? "passed" : "missing",
+    summary: present ? passedSummary : `${id} should be recorded before evidence work is expanded.`
+  };
+}
+
+function targetMapOutOfScopeReferences(
+  targetMap: BugBountyTargetMapInput,
+  scope: BugBountyScopeRecord
+): readonly string[] {
+  const outOfScope = scope.intakeAssessment.boundaries.filter((boundary) => boundary.source === "out_of_scope");
+  const references = [
+    ...targetMap.hosts,
+    ...targetMap.apiBases,
+    ...targetMap.redirects,
+    ...targetMap.thirdPartyIntegrations,
+    ...targetMap.endpoints.flatMap((endpoint) => [
+      endpoint.host,
+      endpoint.apiBase,
+      endpoint.path,
+      ...endpoint.redirects,
+      ...endpoint.thirdPartyIntegrations
+    ])
+  ].filter((reference): reference is string => reference !== undefined && reference.trim().length > 0);
+
+  return [...new Set(
+    references.filter((reference) => outOfScope.some((boundary) => boundaryMatchesReference(boundary, reference)))
+  )];
+}
+
+function boundaryMatchesReference(boundary: BugBountyScopeBoundary, reference: string): boolean {
+  const boundaryValue = boundary.normalizedValue;
+  const candidates = referenceBoundaryCandidates(reference);
+  if (boundaryValue.includes("*")) {
+    return candidates.some((candidate) => wildcardBoundaryMatches(boundaryValue, candidate));
+  }
+  return candidates.includes(boundaryValue);
+}
+
+function referenceBoundaryCandidates(reference: string): readonly string[] {
+  const normalized = normalizeBoundaryValue(reference);
+  const candidates = new Set<string>([normalized]);
+  if (/^https?:\/\//i.test(reference.trim())) {
+    try {
+      const parsed = new URL(reference.trim().toLowerCase());
+      candidates.add(parsed.host);
+      candidates.add(parsed.hostname);
+      candidates.add(parsed.pathname.replace(/\/+$/, ""));
+      candidates.add(`${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`);
+    } catch {
+      return [...candidates];
+    }
+  }
+  return [...candidates].filter((candidate) => candidate.length > 0);
+}
+
+function wildcardBoundaryMatches(pattern: string, reference: string): boolean {
+  const escaped = pattern
+    .split("*")
+    .map((segment) => segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp(`^${escaped}$`, "i").test(reference);
+}
+
+function isMutatingMethod(method: BugBountyTargetEndpointInput["method"]): boolean {
+  return method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
+}
+
+function endpointLabel(endpoint: BugBountyTargetEndpointInput): string {
+  return `${endpoint.method ?? "METHOD"} ${endpoint.host ? `${endpoint.host} ` : ""}${endpoint.path}`;
+}
+
+function targetMapNextActions(
+  missingFields: readonly string[],
+  outOfScopeReferences: readonly string[]
+): readonly string[] {
+  if (outOfScopeReferences.length > 0) {
+    return [
+      "Remove or clarify out-of-scope target map references before recording evidence.",
+      "Do not test or contact any referenced asset until program scope is clarified."
+    ];
+  }
+  if (missingFields.length > 0) {
+    return [
+      `Fill target map gaps: ${missingFields.join(", ")}.`,
+      "Keep the run passive and derive hypotheses only from user-supplied artifacts."
+    ];
+  }
+  return [
+    "Record evidence leads for scoped endpoints with role, auth state, impact, and confidence.",
+    "Use state-changing and file-flow markers to prioritize approval and safety review.",
+    "Do not execute requests or scans until a future approved testing stage exists."
+  ];
+}
+
+function redactTargetMapField(field: string, value: string, redactedFields: Set<string>): string {
+  const redacted = redactEvidenceText(value);
+  if (redacted.redacted) {
+    redactedFields.add(field);
+  }
+  return redacted.value;
+}
+
+function redactTargetMapList(field: string, values: readonly string[], redactedFields: Set<string>): readonly string[] {
+  return values.map((value, index) => redactTargetMapField(`${field}[${index}]`, value, redactedFields));
 }
 
 function scopeClarifyingQuestions(assessment: BugBountyScopeIntakeAssessment): readonly string[] {

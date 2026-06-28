@@ -19,7 +19,7 @@ Other assistant capabilities can exist as supporting utilities, but they should 
 - Intent Router for automatic task mode selection
 - Deterministic task modes with structured proposals
 - Development Mode with the existing MVP-first orchestrator, read-only project state detection, and patch preview metadata
-- Bug Bounty Mode with authorization, scope, evidence, and report gates
+- Bug Bounty Mode with authorization, scope, passive target mapping, evidence, and report gates
 - Documentation, Security, Operations, Productivity, and Assistant modes as supporting deterministic stubs
 - Single Writer, Multi Reviewer for development patches
 - Verification and safety policy gates
@@ -32,7 +32,7 @@ Other assistant capabilities can exist as supporting utilities, but they should 
 ## Primary Modes
 
 - Development Mode: code planning, read-only project state detection, MVP-first implementation, patch proposal, patch preview, testing, review
-- Bug Bounty Mode: authorized web security review planning, scope control, MoochackerAgent safety assessment, endpoint mapping placeholders, evidence ledger scaffolding, report drafting
+- Bug Bounty Mode: authorized web security review planning, scope control, MoochackerAgent safety assessment, passive target mapping, evidence ledger scaffolding, report drafting
 
 ## Supporting Modes
 
@@ -138,6 +138,15 @@ corepack pnpm cli -- scope <run-id> --target "api.example.com" --in-scope "api.e
 ```
 
 Scope intake writes `.dure/runs/<run-id>/scope.json`, records MoochackerAgent's passive scope assessment, stores an intake checklist, classifies target boundaries, redacts secret-like scope fields, and never contacts the target.
+
+Record or list a passive bug bounty target map:
+
+```bash
+corepack pnpm cli -- target-map <run-id>
+corepack pnpm cli -- target-map <run-id> --host "api.example.com" --app "Public API" --api-base "https://api.example.com/v1" --auth-state "authenticated" --role-access "user|authenticated|GET /v1/orders/{id}|GET /admin|Owned test user only" --endpoint "GET|api.example.com|/v1/orders/{id}|authenticated|user|false|none|id|||Read order detail" --artifact "user supplied OpenAPI excerpt"
+```
+
+Target maps require a sufficient scope intake and write `.dure/runs/<run-id>/target-map.json`. They record hosts, apps, API bases, auth states, role access, endpoints, state-changing actions, file upload/download flows, redirects, third-party integrations, source artifacts, out-of-scope references, redaction metadata, and next recommended actions. Dure builds this only from user-supplied artifacts and makes no requests in v0.1.
 
 Record or list bug bounty evidence leads:
 

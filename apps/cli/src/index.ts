@@ -16,6 +16,11 @@ import type {
   BugBountySeverity,
   BugBountyScopeIntake,
   BugBountyScopeRecord,
+  BugBountyTargetEndpointInput,
+  BugBountyTargetMapFileFlow,
+  BugBountyTargetMapInput,
+  BugBountyTargetMapRecord,
+  BugBountyTargetMapRoleAccess,
   ConsoleRunSnapshot,
   DevelopmentProjectState,
   PatchChangePlan,
@@ -114,6 +119,22 @@ try {
     process.exit(0);
   }
 
+  if (parsed.command === "target-map") {
+    if (!parsed.runId) {
+      throw new Error("target-map requires a run id.");
+    }
+    const store = new RunStore();
+    if (parsed.listTargetMap) {
+      printTargetMapPreview(store.loadPreview(parsed.runId));
+    } else if (parsed.bugBountyTargetMapInput) {
+      const targetMap = store.attachBugBountyTargetMap(parsed.runId, { targetMap: parsed.bugBountyTargetMapInput });
+      printTargetMap(targetMap);
+    } else {
+      throw new Error("target-map requires fields to record a map, or no options to show the recorded map.");
+    }
+    process.exit(0);
+  }
+
   if (parsed.command === "apply") {
     if (!parsed.runId) {
       throw new Error("apply requires a run id.");
@@ -196,6 +217,7 @@ interface ParsedArgs {
     | "approve"
     | "reject"
     | "scope"
+    | "target-map"
     | "apply"
     | "verify"
     | "evidence"
@@ -211,6 +233,8 @@ interface ParsedArgs {
   readonly verificationScripts?: readonly WorkspaceVerificationScriptName[];
   readonly timeoutMs?: number;
   readonly scopeIntake?: BugBountyScopeIntake;
+  readonly bugBountyTargetMapInput?: BugBountyTargetMapInput;
+  readonly listTargetMap?: boolean;
   readonly bugBountyEvidenceInput?: BugBountyEvidenceInput;
   readonly listEvidence?: boolean;
   readonly bugBountyReportDraftInput?: BugBountyReportDraftInput;
@@ -281,6 +305,11 @@ function parseArgs(tokens: readonly string[]): ParsedArgs {
   if (commandOrRequest === "scope") {
     rejectRunCommandGlobalOptions("scope", modeOverride, persist);
     return parseScopeCommand(rest, persist);
+  }
+
+  if (commandOrRequest === "target-map") {
+    rejectRunCommandGlobalOptions("target-map", modeOverride, persist);
+    return parseTargetMapCommand(rest, persist);
   }
 
   if (commandOrRequest === "apply") {
@@ -406,6 +435,50 @@ function parseScopeCommand(tokens: readonly string[], persist: boolean): ParsedA
     command: "scope",
     runId,
     scopeIntake,
+    persist
+  };
+}
+
+function parseTargetMapCommand(tokens: readonly string[], persist: boolean): ParsedArgs {
+  const [runId, ...rest] = tokens;
+  if (!runId || runId.trim().length === 0) {
+    throw new Error("target-map requires exactly one run id.");
+  }
+  if (rest.length === 0) {
+    return { command: "target-map", runId, listTargetMap: true, persist };
+  }
+
+  const options = parseCommandOptions(rest, [
+    "host",
+    "app",
+    "api-base",
+    "auth-state",
+    "role-access",
+    "endpoint",
+    "file-flow",
+    "redirect",
+    "third-party",
+    "artifact",
+    "notes"
+  ]);
+  const targetMap: BugBountyTargetMapInput = {
+    hosts: listOptions(options, "host"),
+    applications: listOptions(options, "app"),
+    apiBases: listOptions(options, "api-base"),
+    authStates: listOptions(options, "auth-state"),
+    roleAccess: (options.get("role-access") ?? []).map(parseTargetMapRoleAccess),
+    endpoints: (options.get("endpoint") ?? []).map(parseTargetEndpoint),
+    fileFlows: listOptions(options, "file-flow"),
+    redirects: listOptions(options, "redirect"),
+    thirdPartyIntegrations: listOptions(options, "third-party"),
+    sourceArtifacts: listOptions(options, "artifact"),
+    notes: firstOption(options, "notes")
+  };
+
+  return {
+    command: "target-map",
+    runId,
+    bugBountyTargetMapInput: targetMap,
     persist
   };
 }
@@ -589,6 +662,81 @@ function mergeLists(left: readonly string[], right: readonly string[]): readonly
   return [...left, ...right].map((item) => item.trim()).filter((item) => item.length > 0);
 }
 
+function parseTargetMapRoleAccess(value: string): BugBountyTargetMapRoleAccess {
+  const [role = "", authState = "unknown", canAccess = "", cannotAccess = "", notes] = pipeParts(value);
+  return {
+    role,
+    authState,
+    canAccess: splitList(canAccess),
+    cannotAccess: splitList(cannotAccess),
+    notes: optionalSegment(notes)
+  };
+}
+
+function parseTargetEndpoint(value: string): BugBountyTargetEndpointInput {
+  const parts = pipeParts(value);
+  if (parts.length === 1) {
+    return {
+      path: parts[0],
+      parameters: [],
+      roles: [],
+      stateChanging: false,
+      fileFlow: "none",
+      redirects: [],
+      thirdPartyIntegrations: []
+    };
+  }
+
+  const [
+    methodValue = "",
+    host = "",
+    endpointPath = "",
+    authState = "",
+    roles = "",
+    stateChanging = "",
+    fileFlow = "",
+    parameters = "",
+    redirects = "",
+    thirdParty = "",
+    notes
+  ] = parts;
+  return {
+    method: methodValue ? parseHttpMethod(methodValue) : undefined,
+    host: optionalSegment(host),
+    path: endpointPath,
+    parameters: splitList(parameters),
+    authState: optionalSegment(authState),
+    roles: splitList(roles),
+    stateChanging: stateChanging ? parseBoolean(stateChanging, "endpoint state-changing") : false,
+    fileFlow: parseTargetMapFileFlow(fileFlow),
+    redirects: splitList(redirects),
+    thirdPartyIntegrations: splitList(thirdParty),
+    notes: optionalSegment(notes)
+  };
+}
+
+function pipeParts(value: string): readonly string[] {
+  return value.split("|").map((part) => part.trim());
+}
+
+function optionalSegment(value: string | undefined): string | undefined {
+  return value && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function parseTargetMapFileFlow(value: string | undefined): BugBountyTargetMapFileFlow {
+  const normalized = (value ?? "none").trim().toLowerCase().replace(/-/g, "_");
+  if (normalized === "" || normalized === "none") {
+    return "none";
+  }
+  if (normalized === "upload" || normalized === "download" || normalized === "upload_download") {
+    return normalized;
+  }
+  if (normalized === "both") {
+    return "upload_download";
+  }
+  throw new Error(`Unsupported target map file flow: ${value}.`);
+}
+
 function parseVerificationScripts(values: readonly string[]): readonly WorkspaceVerificationScriptName[] | undefined {
   if (values.length === 0) {
     return undefined;
@@ -769,6 +917,7 @@ function printUsage(): void {
   console.log('  dure apply <run-id> --workspace ".dure/workspaces/<run-id>"');
   console.log("  dure verify <run-id> --script test --timeout-ms 30000");
   console.log('  dure scope <run-id> --target "api.example.com" --in-scope "api.example.com" --forbidden "DoS,brute force"');
+  console.log('  dure target-map <run-id> --host "api.example.com" --api-base "https://api.example.com/v1" --endpoint "GET|api.example.com|/v1/orders|authenticated|user|false|none"');
   console.log('  dure evidence <run-id> --asset "api.example.com" --hypothesis "IDOR on order detail" --impact "Potential cross-account read" --scope-note "In scope" --next-action "Confirm with test accounts"');
   console.log("  dure report <run-id> --lead <lead-id> --severity medium");
 }
@@ -943,6 +1092,7 @@ function summarizeArtifacts(preview: RunPreview): readonly string[] {
     `run dir: ${preview.artifactPaths.runDir}`,
     `decision log: ${preview.artifactPaths.decisionLog}`,
     `scope: ${preview.bugBountyScope ? "recorded" : "not recorded"}`,
+    `target map: ${preview.bugBountyTargetMap ? "recorded" : "not recorded"}`,
     `evidence leads: ${preview.bugBountyEvidenceLedger?.entries.length ?? 0}`,
     `report drafts: ${preview.bugBountyReportDrafts?.length ?? 0}`,
     `approval: ${preview.approvalRecord ? preview.approvalRecord.decision : "not recorded"}`,
@@ -1058,6 +1208,79 @@ function printScope(record: BugBountyScopeRecord): void {
       : ["Scope intake is sufficient for passive planning."]
   );
   section("Next Allowed", record.intakeAssessment.nextAllowedActions);
+}
+
+function printTargetMap(record: BugBountyTargetMapRecord): void {
+  console.log("Dure Target Map");
+  console.log("");
+  section("Run", [`id: ${record.runId}`, `target map: ${record.id}`, `scope target: ${record.scopeTarget}`]);
+  section("Inventory", [
+    `hosts: ${formatList(record.hosts)}`,
+    `applications: ${formatList(record.applications)}`,
+    `api bases: ${formatList(record.apiBases)}`,
+    `auth states: ${formatList(record.authStates)}`,
+    `source artifacts: ${formatList(record.sourceArtifacts)}`
+  ]);
+  section(
+    "Role Access",
+    record.roleAccess.length > 0
+      ? record.roleAccess.map((role) =>
+          `${role.role} (${role.authState}) can ${formatList(role.canAccess)}; cannot ${formatList(role.cannotAccess)}`
+        )
+      : ["not recorded"]
+  );
+  section(
+    "Endpoints",
+    record.endpoints.length > 0
+      ? record.endpoints.map((endpoint) =>
+          `${endpoint.id}: ${endpoint.method ?? "METHOD"} ${endpoint.host ? `${endpoint.host} ` : ""}${endpoint.path}`
+          + ` auth=${endpoint.authState ?? "unknown"} roles=${formatList(endpoint.roles)}`
+          + ` state-changing=${endpoint.stateChanging ? "yes" : "no"} file-flow=${endpoint.fileFlow}`
+        )
+      : ["not recorded"]
+  );
+  section("Assessment", [
+    `scope status: ${record.assessment.scopeStatus}`,
+    `safety: ${record.assessment.safetyLevel}`,
+    `passive only: ${record.assessment.passiveOnly ? "yes" : "no"}`,
+    `no requests made: ${record.assessment.noRequestsMade ? "yes" : "no"}`,
+    `endpoints: ${record.assessment.endpointCount}`,
+    `state-changing endpoints: ${record.assessment.stateChangingEndpoints}`,
+    `file-flow endpoints: ${record.assessment.fileFlowEndpoints}`,
+    `third-party integrations: ${record.assessment.thirdPartyIntegrationCount}`,
+    `missing fields: ${formatList(record.assessment.missingFields)}`,
+    `out-of-scope references: ${formatList(record.assessment.outOfScopeReferences)}`,
+    `redacted fields: ${formatList(record.assessment.redactedFields)}`
+  ]);
+  section(
+    "Target Map Checks",
+    record.assessment.checks.map((check) => `${check.status}: ${check.id} - ${check.summary}`)
+  );
+  section("Next", record.assessment.nextRecommendedActions);
+}
+
+function printTargetMapPreview(preview: RunPreview): void {
+  if (preview.proposal.kind !== "bug_bounty_review") {
+    throw new Error(`Run ${preview.metadata.id} is not a bug bounty proposal (${preview.proposal.kind}).`);
+  }
+
+  if (preview.bugBountyTargetMap) {
+    printTargetMap(preview.bugBountyTargetMap);
+    return;
+  }
+
+  console.log("Dure Target Map");
+  console.log("");
+  section("Run", [
+    `id: ${preview.metadata.id}`,
+    `target: ${preview.bugBountyScope?.target ?? "scope not recorded"}`,
+    "target map: not recorded"
+  ]);
+  section("Next", [
+    preview.bugBountyScope?.intakeAssessment.status === "sufficient"
+      ? "Record a passive target map from user-supplied artifacts before expanding evidence work."
+      : "Record sufficient bug bounty scope before creating a target map."
+  ]);
 }
 
 function printEvidenceRecord(record: BugBountyEvidenceRecord): void {

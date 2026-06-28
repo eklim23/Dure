@@ -282,6 +282,74 @@ test("scope command records bug bounty scope intake", async () => {
   assert.match(result.stdout, /Next Allowed/);
 });
 
+test("target-map command records and lists passive bug bounty target maps", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-target-map-"));
+  const record = persistRun(tempRoot, bugBountyProposalFixture(), "bug_bounty");
+
+  assert.equal(runCli(tempRoot, [
+    "scope",
+    record.id,
+    "--target",
+    "api.example.com",
+    "--in-scope",
+    "api.example.com,/v1/*",
+    "--out-of-scope",
+    "admin.example.com",
+    "--allowed",
+    "read-only authorization checks",
+    "--forbidden",
+    "DoS,brute force",
+    "--rate-limit",
+    "10 requests per minute",
+    "--roles",
+    "user,admin-test",
+    "--data",
+    "redact tokens and personal data",
+    "--authorization-note",
+    "Program scope supplied by user"
+  ]).status, 0);
+
+  const recorded = runCli(tempRoot, [
+    "target-map",
+    record.id,
+    "--host",
+    "api.example.com",
+    "--app",
+    "Public API",
+    "--api-base",
+    "https://api.example.com/v1",
+    "--auth-state",
+    "authenticated",
+    "--role-access",
+    "user|authenticated|GET /v1/orders/{id},POST /v1/avatar|GET /admin|Owned test user only",
+    "--endpoint",
+    "GET|api.example.com|/v1/orders/{id}|authenticated|user|false|none|id|||Read order detail",
+    "--endpoint",
+    "POST|api.example.com|/v1/avatar|authenticated|user|true|upload|file|||Upload avatar",
+    "--file-flow",
+    "avatar upload",
+    "--third-party",
+    "cdn.example.com",
+    "--artifact",
+    "user supplied OpenAPI excerpt"
+  ]);
+  const listed = runCli(tempRoot, ["target-map", record.id]);
+  const targetMapPath = path.join(tempRoot, ".dure", "runs", record.id, "target-map.json");
+
+  assert.equal(recorded.status, 0, recorded.stderr);
+  assert.match(recorded.stdout, /Dure Target Map/);
+  assert.match(recorded.stdout, /scope target: api\.example\.com/);
+  assert.match(recorded.stdout, /endpoints: 2/);
+  assert.match(recorded.stdout, /state-changing endpoints: 1/);
+  assert.match(recorded.stdout, /file-flow endpoints: 1/);
+  assert.match(recorded.stdout, /no requests made: yes/);
+  assert.match(recorded.stdout, /Target Map Checks/);
+  assert.equal(listed.status, 0, listed.stderr);
+  assert.match(listed.stdout, /Dure Target Map/);
+  assert.match(listed.stdout, /target map: target-map-/);
+  assert.ok(existsSync(targetMapPath));
+});
+
 test("evidence command records and lists bug bounty evidence leads", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-evidence-"));
   const record = persistRun(tempRoot, bugBountyProposalFixture(), "bug_bounty");

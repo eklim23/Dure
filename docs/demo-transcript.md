@@ -60,6 +60,7 @@ Safety Result:
 
 ```bash
 corepack pnpm cli -- scope <run-id> --target "api.example.com" --in-scope "api.example.com,/v1/*" --forbidden "DoS,brute force" --authorization-note "Program scope supplied by user"
+corepack pnpm cli -- target-map <run-id> --host "api.example.com" --api-base "https://api.example.com/v1" --endpoint "GET|api.example.com|/v1/orders/{id}|authenticated|user|false|none|id|||Read order detail" --artifact "user supplied OpenAPI excerpt"
 corepack pnpm cli -- evidence <run-id> --status testing --asset "api.example.com" --hypothesis "Possible object-level authorization issue" --impact "Potential cross-account read" --confidence medium --scope-note "In scope" --next-action "Confirm safely with owned test accounts"
 corepack pnpm cli -- report <run-id> --lead <lead-id> --severity medium
 ```

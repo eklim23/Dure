@@ -10,7 +10,7 @@ Dure assumes autonomous coding systems can create real security, stability, and 
 - Git history and audit trail
 - Skill manifests and loaded tools
 - Decision logs
-- Bug bounty scope, evidence, and report drafts
+- Bug bounty scope, passive target maps, evidence, and report drafts
 
 ## Primary Risks
 
@@ -54,6 +54,7 @@ Dure assumes autonomous coding systems can create real security, stability, and 
 - Test, lint, typecheck, and dependency audit commands are placeholders unless they pass through the approval-controlled workspace verification path. Workspace verification records structured gates, failure reasons, and redacted output artifact metadata.
 - Untrusted skills cannot be loaded automatically.
 - Bug Bounty Mode produces passive plans only until scope and authorization are confirmed.
+- Bug bounty target maps are user-supplied records only and do not discover, crawl, scan, or contact targets.
 - Bug bounty evidence must avoid real user data and redact sensitive artifacts.
 
 ## Out Of Scope In v0.1

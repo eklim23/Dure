@@ -7,6 +7,7 @@ import test from "node:test";
 import type {
   AssistantRequestContext,
   BugBountyEvidenceInput,
+  BugBountyTargetMapInput,
   SafetyDecision,
   TaskModeProposal,
   VerificationResult
@@ -657,6 +658,159 @@ test("run store blocks dangerous allowed bug bounty scope techniques", async () 
   );
 });
 
+test("run store records passive bug bounty target maps", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-target-map-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:34.000Z")
+  });
+
+  store.attachBugBountyScope(record.id, {
+    scope: sufficientScopeFixture(),
+    now: new Date("2026-06-27T00:00:35.000Z")
+  });
+  const targetMap = store.attachBugBountyTargetMap(record.id, {
+    targetMap: {
+      hosts: ["api.example.com"],
+      applications: ["Public API"],
+      apiBases: ["https://api.example.com/v1"],
+      authStates: ["unauthenticated", "authenticated"],
+      roleAccess: [
+        {
+          role: "user",
+          authState: "authenticated",
+          canAccess: ["GET /v1/orders/{id}", "POST /v1/avatar"],
+          cannotAccess: ["GET /admin"],
+          notes: "Owned test account only."
+        }
+      ],
+      endpoints: [
+        {
+          method: "GET",
+          host: "api.example.com",
+          apiBase: "https://api.example.com/v1",
+          path: "/v1/orders/{id}",
+          parameters: ["id"],
+          authState: "authenticated",
+          roles: ["user"],
+          stateChanging: false,
+          fileFlow: "none",
+          redirects: [],
+          thirdPartyIntegrations: [],
+          notes: "Order detail read path."
+        },
+        {
+          method: "POST",
+          host: "api.example.com",
+          apiBase: "https://api.example.com/v1",
+          path: "/v1/avatar",
+          parameters: ["file"],
+          authState: "authenticated",
+          roles: ["user"],
+          stateChanging: true,
+          fileFlow: "upload",
+          redirects: [],
+          thirdPartyIntegrations: ["cdn.example.com"],
+          notes: "Avatar upload flow."
+        }
+      ],
+      fileFlows: ["avatar upload"],
+      redirects: ["https://api.example.com/v1/login/callback"],
+      thirdPartyIntegrations: ["cdn.example.com"],
+      sourceArtifacts: ["user supplied OpenAPI excerpt"],
+      notes: "Passive mapping only."
+    },
+    now: new Date("2026-06-27T00:00:36.000Z")
+  });
+  const preview = store.loadPreview(record.id);
+
+  assert.match(targetMap.id, /^target-map-20260627-000036Z-[0-9a-f]{6}$/);
+  assert.equal(targetMap.assessment.passiveOnly, true);
+  assert.equal(targetMap.assessment.noRequestsMade, true);
+  assert.equal(targetMap.assessment.endpointCount, 2);
+  assert.equal(targetMap.assessment.stateChangingEndpoints, 1);
+  assert.equal(targetMap.assessment.fileFlowEndpoints, 1);
+  assert.equal(targetMap.assessment.safetyLevel, "safe");
+  assert.equal(targetMap.assessment.outOfScopeReferences.length, 0);
+  assert.equal(preview.bugBountyTargetMap?.id, targetMap.id);
+  assert.equal(preview.bugBountyTargetMap?.endpoints[0].id, "endpoint-001");
+  assert.ok(preview.artifactPaths.targetMap);
+  assert.ok(existsSync(preview.artifactPaths.targetMap));
+  assert.equal(preview.decisionLog.entries.at(-1)?.type, "bug_bounty_target_map_recorded");
+});
+
+test("run store blocks target maps before sufficient scope and flags unsafe references", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-target-map-guards-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const withoutScope = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:37.000Z")
+  });
+  const insufficientScope = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:38.000Z")
+  });
+  const scoped = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:39.000Z")
+  });
+
+  assert.throws(
+    () => store.attachBugBountyTargetMap(withoutScope.id, { targetMap: targetMapFixture() }),
+    /before bug bounty scope intake/
+  );
+  store.attachBugBountyScope(insufficientScope.id, {
+    scope: {
+      ...sufficientScopeFixture(),
+      forbiddenTechniques: []
+    },
+    now: new Date("2026-06-27T00:00:40.000Z")
+  });
+  assert.throws(
+    () => store.attachBugBountyTargetMap(insufficientScope.id, { targetMap: targetMapFixture() }),
+    /until scope intake is sufficient/
+  );
+
+  store.attachBugBountyScope(scoped.id, {
+    scope: sufficientScopeFixture(),
+    now: new Date("2026-06-27T00:00:41.000Z")
+  });
+  const targetMap = store.attachBugBountyTargetMap(scoped.id, {
+    targetMap: {
+      ...targetMapFixture(),
+      hosts: ["api.example.com", "admin.example.com"],
+      notes: "token=supersecretvalue123 should be redacted"
+    },
+    now: new Date("2026-06-27T00:00:42.000Z")
+  });
+
+  assert.equal(targetMap.assessment.safetyLevel, "blocked");
+  assert.ok(targetMap.assessment.outOfScopeReferences.includes("admin.example.com"));
+  assert.ok(targetMap.assessment.redactedFields.includes("notes"));
+  assert.match(targetMap.notes ?? "", /\[redacted-secret\]/);
+});
+
 test("run store records bug bounty evidence ledger entries with redaction", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-evidence-"));
   const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
@@ -1208,6 +1362,43 @@ function sufficientScopeFixture() {
     dataHandlingRules: ["redact tokens and personal data"],
     authorizationNote: "Program scope supplied by user.",
     programRulesUrl: "https://example.com/program"
+  };
+}
+
+function targetMapFixture(overrides: Partial<BugBountyTargetMapInput> = {}): BugBountyTargetMapInput {
+  return {
+    hosts: ["api.example.com"],
+    applications: ["Public API"],
+    apiBases: ["https://api.example.com/v1"],
+    authStates: ["authenticated"],
+    roleAccess: [
+      {
+        role: "user",
+        authState: "authenticated",
+        canAccess: ["GET /v1/orders/{id}"],
+        cannotAccess: ["GET /admin"]
+      }
+    ],
+    endpoints: [
+      {
+        method: "GET",
+        host: "api.example.com",
+        apiBase: "https://api.example.com/v1",
+        path: "/v1/orders/{id}",
+        parameters: ["id"],
+        authState: "authenticated",
+        roles: ["user"],
+        stateChanging: false,
+        fileFlow: "none",
+        redirects: [],
+        thirdPartyIntegrations: []
+      }
+    ],
+    fileFlows: ["none observed"],
+    redirects: [],
+    thirdPartyIntegrations: [],
+    sourceArtifacts: ["user supplied API notes"],
+    ...overrides
   };
 }
 

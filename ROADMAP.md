@@ -18,6 +18,7 @@
 - Controlled apply into a safe workspace with preflight checks and rollback metadata
 - Applied workspace verification with allow-listed package scripts, structured gates, and output artifact summaries
 - Bug bounty scope intake persistence with checklist assessment, boundary classification, and redaction metadata
+- Bug bounty passive target map persistence with endpoint, auth, role, file-flow, and scope-boundary assessment
 - Bug bounty evidence ledger persistence with redaction
 - Bug bounty report draft markdown export
 - Safety policy engine with mode capability allowlists and stop conditions

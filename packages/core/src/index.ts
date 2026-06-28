@@ -488,6 +488,7 @@ export type DecisionLogEntryType =
   | "safety_decision"
   | "approval_decision"
   | "bug_bounty_scope_intake"
+  | "bug_bounty_target_map_recorded"
   | "bug_bounty_evidence_recorded"
   | "bug_bounty_report_drafted"
   | "run_exported"
@@ -529,6 +530,7 @@ export interface RunArtifactPaths {
   readonly workspaceVerification?: string;
   readonly approval?: string;
   readonly scope?: string;
+  readonly targetMap?: string;
   readonly evidenceLedger?: string;
   readonly reports?: string;
   readonly export?: string;
@@ -633,16 +635,6 @@ export interface BugBountyScopeRecord extends BugBountyScopeIntake {
   readonly moochackerAssessment: MoochackerAssessment;
 }
 
-export type BugBountyEvidenceStatus =
-  | "hypothesis"
-  | "testing"
-  | "confirmed"
-  | "duplicate-risk"
-  | "non-issue"
-  | "blocked";
-
-export type BugBountyEvidenceConfidence = "low" | "medium" | "high";
-
 export type BugBountyHttpMethod =
   | "GET"
   | "POST"
@@ -652,6 +644,93 @@ export type BugBountyHttpMethod =
   | "HEAD"
   | "OPTIONS"
   | "OTHER";
+
+export type BugBountyTargetMapFileFlow = "none" | "upload" | "download" | "upload_download";
+
+export type BugBountyTargetMapCheckStatus = "passed" | "missing" | "warning" | "blocked";
+
+export interface BugBountyTargetMapRoleAccess {
+  readonly role: string;
+  readonly authState: string;
+  readonly canAccess: readonly string[];
+  readonly cannotAccess: readonly string[];
+  readonly notes?: string;
+}
+
+export interface BugBountyTargetEndpointInput {
+  readonly method?: BugBountyHttpMethod;
+  readonly host?: string;
+  readonly apiBase?: string;
+  readonly path: string;
+  readonly parameters: readonly string[];
+  readonly authState?: string;
+  readonly roles: readonly string[];
+  readonly stateChanging: boolean;
+  readonly fileFlow: BugBountyTargetMapFileFlow;
+  readonly redirects: readonly string[];
+  readonly thirdPartyIntegrations: readonly string[];
+  readonly notes?: string;
+}
+
+export interface BugBountyTargetEndpoint extends BugBountyTargetEndpointInput {
+  readonly id: string;
+}
+
+export interface BugBountyTargetMapInput {
+  readonly hosts: readonly string[];
+  readonly applications: readonly string[];
+  readonly apiBases: readonly string[];
+  readonly authStates: readonly string[];
+  readonly roleAccess: readonly BugBountyTargetMapRoleAccess[];
+  readonly endpoints: readonly BugBountyTargetEndpointInput[];
+  readonly fileFlows: readonly string[];
+  readonly redirects: readonly string[];
+  readonly thirdPartyIntegrations: readonly string[];
+  readonly sourceArtifacts: readonly string[];
+  readonly notes?: string;
+}
+
+export interface BugBountyTargetMapCheck {
+  readonly id: string;
+  readonly status: BugBountyTargetMapCheckStatus;
+  readonly summary: string;
+}
+
+export interface BugBountyTargetMapAssessment {
+  readonly passiveOnly: true;
+  readonly noRequestsMade: true;
+  readonly scopeStatus: BugBountyScopeStatus;
+  readonly safetyLevel: MoochackerSafetyLevel;
+  readonly missingFields: readonly string[];
+  readonly outOfScopeReferences: readonly string[];
+  readonly redactedFields: readonly string[];
+  readonly checks: readonly BugBountyTargetMapCheck[];
+  readonly endpointCount: number;
+  readonly stateChangingEndpoints: number;
+  readonly fileFlowEndpoints: number;
+  readonly thirdPartyIntegrationCount: number;
+  readonly nextRecommendedActions: readonly string[];
+}
+
+export interface BugBountyTargetMapRecord extends BugBountyTargetMapInput {
+  readonly id: string;
+  readonly runId: string;
+  readonly recordedBy: "user";
+  readonly createdAt: string;
+  readonly scopeTarget: string;
+  readonly endpoints: readonly BugBountyTargetEndpoint[];
+  readonly assessment: BugBountyTargetMapAssessment;
+}
+
+export type BugBountyEvidenceStatus =
+  | "hypothesis"
+  | "testing"
+  | "confirmed"
+  | "duplicate-risk"
+  | "non-issue"
+  | "blocked";
+
+export type BugBountyEvidenceConfidence = "low" | "medium" | "high";
 
 export interface BugBountyRequestResponsePlaceholder {
   readonly requestSummary?: string;
@@ -948,6 +1027,8 @@ export interface ConsoleRunSnapshot {
     readonly target?: string;
     readonly scopeStatus?: BugBountyScopeStatus;
     readonly safetyLevel?: MoochackerSafetyLevel;
+    readonly targetMapEndpoints: number;
+    readonly targetMapStateChangingEndpoints: number;
     readonly evidenceLeads: number;
     readonly reportDrafts: number;
     readonly stopConditions: readonly string[];
@@ -957,6 +1038,7 @@ export interface ConsoleRunSnapshot {
     readonly hasApply: boolean;
     readonly hasWorkspaceVerification: boolean;
     readonly hasScope: boolean;
+    readonly hasTargetMap: boolean;
     readonly hasEvidenceLedger: boolean;
     readonly hasReports: boolean;
     readonly hasMarkdownExport: boolean;
@@ -983,6 +1065,7 @@ export interface RunPreview {
   readonly workspaceVerificationRecord?: WorkspaceVerificationRecord;
   readonly approvalRecord?: ApprovalRecord;
   readonly bugBountyScope?: BugBountyScopeRecord;
+  readonly bugBountyTargetMap?: BugBountyTargetMapRecord;
   readonly bugBountyEvidenceLedger?: BugBountyEvidenceLedger;
   readonly bugBountyReportDrafts?: readonly BugBountyReportDraftRecord[];
   readonly applyRecord?: ApplyRecord;
