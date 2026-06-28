@@ -1,62 +1,101 @@
 # Roadmap
 
-## v0.1
+Dure의 로드맵은 “작게 만들고, 검증하고, 안전하게 확장한다”는 원칙을 따릅니다. 각 단계는 독립적으로 테스트 가능한 산출물을 가져야 합니다.
+
+## v0.1: 안전한 CLI 오케스트레이터 기반
+
+v0.1의 목표는 외부 API 키 없이 실행되는 deterministic MVP입니다.
+
+완료 또는 v0.1 범위:
 
 - Assistant Core
 - Intent Router
-- Deterministic task modes
-- Unified proposal model
+- deterministic task mode
+- unified proposal model
 - Development Mode MVP flow
 - Bug Bounty Mode scope/evidence/report proposal flow
 - Single Writer, Multi Reviewer patch policy
-- Verification and safety gates
-- Skill registry stub
-- Decision log / memory
-- Assistant-first CLI
-- Persistent run preview
-- Approval Gate for patch proposals with risk confirmation, policy checklist, and expiration metadata
-- Controlled apply into a safe workspace with preflight checks and rollback metadata
-- Applied workspace verification with allow-listed package scripts, structured gates, and output artifact summaries
-- Bug bounty scope intake persistence with checklist assessment, boundary classification, and redaction metadata
-- Bug bounty passive target map persistence with endpoint, auth, role, file-flow, and scope-boundary assessment
-- Bug bounty evidence ledger persistence with redaction
-- Bug bounty report draft markdown export
-- Safety policy engine with mode capability allowlists, stop conditions, passive target-map capability separation, and bug bounty run gates
-- CLI UX polish with grouped help, command-specific help, and context-aware suggested commands
-- CLI run listing, mode-neutral show, and redacted Markdown export
-- Open-source baseline: CI, issue/PR templates, license, demo transcript, release checklist, and architecture diagram
-- Read-only Dure Console static UI prototype for agent activity visualization
-- Redacted console-data JSON export and UI import for persisted run inspection
-- Development Mode project state detection for package manager, languages, frameworks, scripts, and MVP stage estimate
-- Development patch preview metadata with file-level change plan, risk assessment, and unified diff
+- verification gate와 safety gate
+- skill registry stub
+- persistent decision log와 memory
+- assistant-first CLI
+- persistent run preview
+- patch proposal approval gate
+- risk confirmation, policy checklist, expiration metadata
+- safe workspace preflight와 controlled apply
+- rollback metadata 생성
+- allow-listed package script 기반 applied workspace verification
+- structured verification gate와 output artifact summary
+- bug bounty scope intake persistence
+- passive target map persistence
+- endpoint, auth, role, file-flow, scope-boundary assessment
+- evidence ledger persistence와 redaction
+- report draft Markdown export
+- mode capability allowlist 기반 safety policy engine
+- active-testing stop condition
+- passive target-map capability separation
+- bug bounty run gate
+- grouped help, command-specific help, suggested command 중심 CLI UX
+- run listing, mode-neutral show, redacted Markdown export
+- CI, issue/PR template, license, demo transcript, release checklist, architecture diagram
+- read-only Dure Console static UI prototype
+- redacted console-data JSON export와 UI import
+- Development Mode project state detection
+- package manager, language, framework, script, MVP stage estimate
+- Development patch preview metadata
+- file-level change plan, risk assessment, unified diff
 
-## v0.2
+v0.1에서 의도적으로 하지 않는 것:
 
-- Real LLM provider interface wiring
-- Deeper project file indexing and framework-specific detectors
-- Evidence ledger and report draft update/edit commands
-- Configurable export formats and destinations
-- Richer Development Mode project-state detection
-- Richer patch preview UX with controlled workspace content comparison after approval
-- Security checklist engine
-- Configurable policy defaults
-- Verification UX polish and richer summaries
-- Dure Console run comparison, filtering, and richer artifact navigation
+- real LLM provider 필수화
+- web dashboard
+- arbitrary shell execution
+- 자동 패키지 설치
+- 외부 bug bounty target 접근, 스캔, exploit, report submission
+- untrusted skill 자동 실행
 
-## v0.3
+## v0.2: 실제 사용성 강화
 
-- Controlled workspace editing
-- Rollback command using Stage 7 rollback metadata
-- Local tool adapters
-- Minimal-impact bug bounty verification helpers with explicit approval
-- Dependency audit integration with explicit approval
-- Multi-run memory and rollback summaries
+v0.2는 v0.1의 안전 모델을 유지하면서 반복 사용성을 높입니다.
 
-## v0.4+
+- optional LLM provider interface wiring
+- provider별 설정과 deterministic mock fallback
+- 더 깊은 project file indexing
+- framework-specific detector
+- evidence ledger edit/update command
+- report draft edit/update command
+- export format과 destination 설정
+- patch preview UX 개선
+- approval 이후 controlled workspace content comparison
+- security checklist engine
+- configurable policy defaults
+- verification summary 개선
+- Dure Console run comparison
+- Dure Console filtering과 artifact navigation
 
-- Web UI
-- Plugin marketplace
-- Signed skills
-- Sandboxed tool execution
-- Team collaboration
-- Optional supporting productivity/documentation integrations
+## v0.3: 승인형 실행과 복구력
+
+v0.3은 실제 개발 워크플로우와 연결되는 부분을 더 단단하게 만듭니다.
+
+- controlled workspace editing 고도화
+- rollback command
+- Stage 7 rollback metadata 기반 복구
+- local tool adapter
+- explicit approval 기반 minimal-impact bug bounty verification helper
+- explicit approval 기반 dependency audit integration
+- multi-run memory
+- rollback summary
+- policy decision diff
+
+## v0.4+: 협업과 확장 생태계
+
+v0.4 이후는 Dure가 팀 단위로 쓰일 수 있는 기반을 다룹니다.
+
+- web UI
+- team collaboration
+- plugin marketplace
+- signed skills
+- sandboxed tool execution
+- optional productivity/documentation integration
+- organization policy profile
+- shared audit log export

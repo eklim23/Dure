@@ -1,6 +1,6 @@
 # Demo Transcript
 
-This transcript shows the intended v0.1 CLI experience. Output is abbreviated for readability.
+이 문서는 Dure v0.1 CLI가 어떤 느낌으로 동작하는지 보여주는 축약 transcript입니다. 실제 출력은 버전과 run artifact 상태에 따라 조금 달라질 수 있습니다.
 
 ## Help
 
@@ -40,7 +40,12 @@ Verification Result:
 
 Safety Result:
   - allowed: yes
+
+Next Recommended Action:
+  - Review the patch preview before approval.
 ```
+
+패치 preview, 승인, apply, 검증 흐름:
 
 ```bash
 corepack pnpm cli -- preview <run-id>
@@ -72,7 +77,12 @@ Safety Result:
   - allowed: yes
   - Safety policy allowed passive bug_bounty output with execution limits.
   - blocked capabilities: map_targets_placeholder, collect_evidence_placeholder
+
+Next Recommended Action:
+  - Record authorized scope before evidence or report drafting.
 ```
+
+승인된 범위와 사용자가 제공한 수동 정보만 기록하는 예시:
 
 ```bash
 corepack pnpm cli -- scope <run-id> --target "api.example.com" --in-scope "api.example.com,/v1/*" --forbidden "DoS,brute force" --authorization-note "Program scope supplied by user"
@@ -80,6 +90,8 @@ corepack pnpm cli -- target-map <run-id> --host "api.example.com" --api-base "ht
 corepack pnpm cli -- evidence <run-id> --status testing --asset "api.example.com" --hypothesis "Possible object-level authorization issue" --impact "Potential cross-account read" --confidence medium --scope-note "In scope" --next-action "Confirm safely with owned test accounts"
 corepack pnpm cli -- report <run-id> --lead <lead-id> --severity medium
 ```
+
+Dure v0.1은 위 명령에서 실제 대상에 요청을 보내지 않습니다. scope, target map, evidence, report draft를 로컬 run artifact로 정리합니다.
 
 ## Run Inspection
 
@@ -109,3 +121,5 @@ Safety Result:
   - blocker: MoochackerAgent marked the requested bug bounty workflow as blocked.
   - blocker: The request matched the active testing stop signal: ddos.
 ```
+
+이 경우 Dure는 active testing을 진행하지 않고 decision log에 차단 사유를 남깁니다.
