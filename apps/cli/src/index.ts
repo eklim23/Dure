@@ -17,6 +17,7 @@ import type {
   BugBountyScopeIntake,
   BugBountyScopeRecord,
   ConsoleRunSnapshot,
+  DevelopmentProjectState,
   PatchProposal,
   RunExportRecord,
   RunListItem,
@@ -781,6 +782,9 @@ function printResult(result: AssistantRunResult): void {
   if (result.verificationResult) {
     section("Verification Result", summarizeChecks(result.verificationResult.checks, result.verificationResult.accepted));
   }
+  if (result.developmentProjectState) {
+    section("Development Project State", summarizeDevelopmentProjectState(result.developmentProjectState));
+  }
   section("Safety Result", summarizeSafetyDecision(result.safetyDecision));
 
   section("Next Recommended Action", [result.nextRecommendedAction]);
@@ -828,6 +832,9 @@ function printRunShow(preview: RunPreview): void {
   ]);
   section("Request", [preview.request.originalInput]);
   section("Proposal", summarizeProposal(preview.proposal));
+  if (preview.developmentProjectState) {
+    section("Development Project State", summarizeDevelopmentProjectState(preview.developmentProjectState));
+  }
   section("Safety", summarizeSafetyDecision(preview.safetyDecision));
   section("Artifacts", summarizeArtifacts(preview));
   section("Decision Log", [
@@ -915,10 +922,31 @@ function summarizeArtifacts(preview: RunPreview): readonly string[] {
     `apply: ${preview.applyRecord ? "recorded" : "not recorded"}`,
     `workspace verification: ${preview.workspaceVerificationRecord ? preview.workspaceVerificationRecord.nextStatus : "not recorded"}`
   ];
+  lines.push(`project state: ${preview.developmentProjectState ? "recorded" : "not recorded"}`);
   if (preview.artifactPaths.export) {
     lines.push(`export: ${preview.artifactPaths.export}`);
   }
   return lines;
+}
+
+function summarizeDevelopmentProjectState(state: DevelopmentProjectState): readonly string[] {
+  const configuredScripts = state.scripts
+    .filter((script) => script.configured)
+    .map((script) => script.name);
+  const missingScripts = state.scripts
+    .filter((script) => !script.configured)
+    .map((script) => script.name);
+
+  return [
+    `package manager: ${state.packageManager}`,
+    `languages: ${state.languages.map((item) => `${item.language}(${item.files})`).join(", ") || "unknown"}`,
+    `frameworks: ${state.frameworks.join(", ")}`,
+    `configured scripts: ${configuredScripts.join(", ") || "none"}`,
+    `missing scripts: ${missingScripts.join(", ") || "none"}`,
+    `estimated MVP stage: ${state.currentMvpStage.stage.id} - ${state.currentMvpStage.stage.name}`,
+    `stage confidence: ${state.currentMvpStage.confidence.toFixed(2)}`,
+    `files indexed: ${state.fileIndex.totalFiles}`
+  ];
 }
 
 function printApproval(record: ApprovalRecord): void {

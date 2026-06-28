@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import type { AssistantRequestContext } from "@dure/core";
 import { TaskModeRunner } from "../src/index";
@@ -12,6 +15,51 @@ test("development mode reuses the existing patch orchestrator", () => {
   assert.equal(result.safetyDecision.policyEvaluation?.mode, "development");
   assert.ok(result.developmentResult);
   assert.equal(result.selectedAgentTeam.includes("MoochackerAgent"), false);
+});
+
+test("development mode detects local project state without running scripts", async () => {
+  const workspaceRoot = await mkdtemp(path.join(tmpdir(), "dure-project-state-"));
+  await mkdir(path.join(workspaceRoot, "src"), { recursive: true });
+  await mkdir(path.join(workspaceRoot, "docs"), { recursive: true });
+  await writeFile(path.join(workspaceRoot, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n", "utf8");
+  await writeFile(
+    path.join(workspaceRoot, "package.json"),
+    JSON.stringify({
+      scripts: {
+        test: "node --test",
+        typecheck: "tsc --noEmit",
+        build: "tsc -b"
+      },
+      dependencies: {
+        react: "latest"
+      },
+      devDependencies: {
+        vite: "latest",
+        typescript: "latest"
+      }
+    }),
+    "utf8"
+  );
+  await writeFile(path.join(workspaceRoot, "src", "index.ts"), "export const ok = true;\n", "utf8");
+  await writeFile(path.join(workspaceRoot, "src", "index.test.ts"), "import 'node:test';\n", "utf8");
+  await writeFile(path.join(workspaceRoot, "docs", "architecture.md"), "# Architecture\n", "utf8");
+
+  const result = new TaskModeRunner().execute(
+    context("development", "Add a small feature"),
+    { workspaceRoot, now: new Date("2026-06-28T00:00:00.000Z") }
+  );
+  const state = result.developmentProjectState;
+
+  assert.ok(state);
+  assert.equal(state.packageManager, "pnpm");
+  assert.ok(state.packageManagerEvidence.includes("pnpm-lock.yaml"));
+  assert.ok(state.languages.some((item) => item.language === "typescript"));
+  assert.ok(state.frameworks.includes("react"));
+  assert.ok(state.frameworks.includes("vite"));
+  assert.equal(state.scripts.find((script) => script.name === "test")?.configured, true);
+  assert.equal(state.scripts.find((script) => script.name === "lint")?.configured, false);
+  assert.equal(state.currentMvpStage.stage.id, 4);
+  assert.equal(state.notes.some((note) => note.includes("no scripts or external commands were executed")), true);
 });
 
 test("documentation mode returns a document proposal", () => {

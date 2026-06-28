@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -13,6 +13,7 @@ test("assistant core routes development requests through development mode", () =
   assert.equal(result.context.selectedMode, "development");
   assert.equal(result.proposal.kind, "patch");
   assert.equal(result.verificationResult?.accepted, true);
+  assert.ok(result.developmentProjectState);
 });
 
 test("assistant core routes documentation requests to document proposals", () => {
@@ -82,6 +83,36 @@ test("assistant core can persist a run record", async () => {
   assert.equal(result.runRecord.selectedMode, "documentation");
   assert.ok(existsSync(result.runArtifactPaths.metadata));
   assert.ok(existsSync(result.runArtifactPaths.decisionLog));
+});
+
+test("assistant core persists development project state for development runs", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "dure-assistant-development-state-"));
+  const workspaceRoot = path.join(root, "workspace");
+  const runStoreRoot = path.join(root, ".dure", "runs");
+  await mkdir(path.join(workspaceRoot, "src"), { recursive: true });
+  await writeFile(path.join(workspaceRoot, "package.json"), JSON.stringify({ scripts: { test: "node --test" } }), "utf8");
+  await writeFile(path.join(workspaceRoot, "package-lock.json"), "{}", "utf8");
+  await writeFile(path.join(workspaceRoot, "src", "index.js"), "module.exports = true;\n", "utf8");
+
+  const result = new AssistantCore().run("Create a small app", new Date("2026-06-27T00:00:00.000Z"), {
+    modeOverride: "development",
+    persist: true,
+    runStoreRoot,
+    workspaceRoot
+  });
+  assert.ok(result.runId);
+
+  const preview = new RunStore(runStoreRoot).loadPreview(result.runId);
+  const snapshot = new RunStore(runStoreRoot).createConsoleSnapshot(result.runId);
+
+  assert.ok(preview.developmentProjectState);
+  assert.equal(preview.developmentProjectState.packageManager, "npm");
+  assert.equal(preview.developmentProjectState.scripts.find((script) => script.name === "test")?.configured, true);
+  assert.ok(preview.artifactPaths.projectState);
+  assert.ok(existsSync(preview.artifactPaths.projectState));
+  assert.equal(preview.decisionLog.entries.some((entry) => entry.type === "development_project_state"), true);
+  assert.equal(snapshot.projectState?.packageManager, "npm");
+  assert.equal(snapshot.artifacts.hasProjectState, true);
 });
 
 test("assistant core persists MoochackerAgent in bug bounty run metadata", async () => {

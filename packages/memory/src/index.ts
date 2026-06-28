@@ -29,6 +29,7 @@ import type {
   DecisionLog,
   DecisionLogEntry,
   DecisionLogEntryType,
+  DevelopmentProjectState,
   MoochackerAssessment,
   PatchChange,
   RunArtifactPaths,
@@ -74,6 +75,7 @@ export interface PersistRunInput {
   readonly proposal: TaskModeProposal;
   readonly safetyDecision: SafetyDecision;
   readonly verificationResult?: VerificationResult;
+  readonly developmentProjectState?: DevelopmentProjectState;
   readonly decisionLog: DecisionLog;
   readonly nextRecommendedAction: string;
   readonly now?: Date;
@@ -134,7 +136,10 @@ export class RunStore {
     const now = input.now ?? new Date();
     const runId = this.createUniqueRunId(now);
     const runDir = path.join(this.root, runId);
-    const artifactPaths = createArtifactPaths(runDir, input.verificationResult !== undefined);
+    const artifactPaths = createArtifactPaths(runDir, {
+      hasVerification: input.verificationResult !== undefined,
+      hasProjectState: input.developmentProjectState !== undefined
+    });
 
     mkdirSync(runDir, { recursive: true });
 
@@ -161,6 +166,9 @@ export class RunStore {
     writeJson(artifactPaths.safety, input.safetyDecision);
     if (artifactPaths.verification && input.verificationResult) {
       writeJson(artifactPaths.verification, input.verificationResult);
+    }
+    if (artifactPaths.projectState && input.developmentProjectState) {
+      writeJson(artifactPaths.projectState, input.developmentProjectState);
     }
     writeJson(artifactPaths.metadata, {
       ...record,
@@ -637,6 +645,7 @@ export class RunStore {
     const runDir = path.join(this.root, runId);
     const artifactPaths = createArtifactPaths(runDir, {
       hasVerification: existsSync(path.join(runDir, "verification.json")),
+      hasProjectState: existsSync(path.join(runDir, "project-state.json")),
       hasWorkspaceVerification: existsSync(path.join(runDir, "workspace-verification.json")),
       hasApproval: existsSync(path.join(runDir, "approval.json")),
       hasScope: existsSync(path.join(runDir, "scope.json")),
@@ -661,6 +670,9 @@ export class RunStore {
     const safetyDecision = readJson<SafetyDecision>(artifactPaths.safety);
     const verificationResult = artifactPaths.verification && existsSync(artifactPaths.verification)
       ? readJson<VerificationResult>(artifactPaths.verification)
+      : undefined;
+    const developmentProjectState = artifactPaths.projectState && existsSync(artifactPaths.projectState)
+      ? readJson<DevelopmentProjectState>(artifactPaths.projectState)
       : undefined;
     const workspaceVerificationRecord = artifactPaths.workspaceVerification && existsSync(artifactPaths.workspaceVerification)
       ? readJson<WorkspaceVerificationRecord>(artifactPaths.workspaceVerification)
@@ -706,6 +718,7 @@ export class RunStore {
       proposal,
       safetyDecision,
       verificationResult,
+      developmentProjectState,
       workspaceVerificationRecord,
       approvalRecord,
       bugBountyScope,
@@ -811,10 +824,12 @@ export class RunStore {
       readonly hasApply?: boolean;
       readonly hasRollback?: boolean;
       readonly hasWorkspaceVerification?: boolean;
+      readonly hasProjectState?: boolean;
     }
   ): void {
     const artifactPaths = createArtifactPaths(preview.artifactPaths.runDir, {
       hasVerification: preview.artifactPaths.verification !== undefined,
+      hasProjectState: options.hasProjectState ?? preview.artifactPaths.projectState !== undefined,
       hasWorkspaceVerification:
         options.hasWorkspaceVerification ?? preview.artifactPaths.workspaceVerification !== undefined,
       hasApproval: options.hasApproval ?? preview.artifactPaths.approval !== undefined,
@@ -871,6 +886,7 @@ function createArtifactPaths(
   runDir: string,
   options: boolean | {
     readonly hasVerification?: boolean;
+    readonly hasProjectState?: boolean;
     readonly hasWorkspaceVerification?: boolean;
     readonly hasApproval?: boolean;
     readonly hasScope?: boolean;
@@ -891,6 +907,7 @@ function createArtifactPaths(
     decisionLog: path.join(runDir, "decision-log.jsonl"),
     metadata: path.join(runDir, "metadata.json"),
     verification: normalized.hasVerification ? path.join(runDir, "verification.json") : undefined,
+    projectState: normalized.hasProjectState ? path.join(runDir, "project-state.json") : undefined,
     workspaceVerification: normalized.hasWorkspaceVerification
       ? path.join(runDir, "workspace-verification.json")
       : undefined,
@@ -1395,6 +1412,28 @@ function buildConsoleSnapshot(preview: RunPreview, now: Date): ConsoleRunSnapsho
       workspaceAccepted: preview.workspaceVerificationRecord?.accepted,
       checks: consoleVerificationChecks(preview)
     },
+    projectState: preview.developmentProjectState
+      ? {
+          packageManager: preview.developmentProjectState.packageManager,
+          languages: preview.developmentProjectState.languages,
+          frameworks: preview.developmentProjectState.frameworks,
+          configuredScripts: preview.developmentProjectState.scripts
+            .filter((script) => script.configured)
+            .map((script) => script.name),
+          missingScripts: preview.developmentProjectState.scripts
+            .filter((script) => !script.configured)
+            .map((script) => script.name),
+          currentMvpStage: {
+            id: preview.developmentProjectState.currentMvpStage.stage.id,
+            name: preview.developmentProjectState.currentMvpStage.stage.name,
+            confidence: preview.developmentProjectState.currentMvpStage.confidence,
+            rationale: redactedExportText(preview.developmentProjectState.currentMvpStage.rationale)
+          },
+          fileCount: preview.developmentProjectState.fileIndex.totalFiles,
+          sampledFiles: preview.developmentProjectState.fileIndex.sampledFiles.slice(0, 24).map(markdownLine),
+          notes: redactedConsoleList(preview.developmentProjectState.notes)
+        }
+      : undefined,
     development: proposal.kind === "patch"
       ? {
           stage: `${proposal.stage.id}: ${redactedExportText(proposal.stage.name)}`,
@@ -1424,7 +1463,8 @@ function buildConsoleSnapshot(preview: RunPreview, now: Date): ConsoleRunSnapsho
       hasScope: preview.bugBountyScope !== undefined,
       hasEvidenceLedger: preview.bugBountyEvidenceLedger !== undefined,
       hasReports: (preview.bugBountyReportDrafts?.length ?? 0) > 0,
-      hasMarkdownExport: preview.artifactPaths.export !== undefined
+      hasMarkdownExport: preview.artifactPaths.export !== undefined,
+      hasProjectState: preview.developmentProjectState !== undefined
     },
     decisions: preview.decisionLog.entries.map((entry) => ({
       type: entry.type,

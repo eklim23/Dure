@@ -18,7 +18,7 @@ Other assistant capabilities can exist as supporting utilities, but they should 
 - Assistant Core for natural language request handling
 - Intent Router for automatic task mode selection
 - Deterministic task modes with structured proposals
-- Development Mode with the existing MVP-first orchestrator
+- Development Mode with the existing MVP-first orchestrator and read-only project state detection
 - Bug Bounty Mode with authorization, scope, evidence, and report gates
 - Documentation, Security, Operations, Productivity, and Assistant modes as supporting deterministic stubs
 - Single Writer, Multi Reviewer for development patches
@@ -31,7 +31,7 @@ Other assistant capabilities can exist as supporting utilities, but they should 
 
 ## Primary Modes
 
-- Development Mode: code planning, MVP-first implementation, patch proposal, testing, review
+- Development Mode: code planning, read-only project state detection, MVP-first implementation, patch proposal, testing, review
 - Bug Bounty Mode: authorized web security review planning, scope control, MoochackerAgent safety assessment, endpoint mapping placeholders, evidence ledger scaffolding, report drafting
 
 ## Supporting Modes
@@ -93,6 +93,8 @@ corepack pnpm cli -- console-data <run-id> --output .dure/runs/<run-id>/console-
 ```
 
 `runs` lists recent `.dure/runs` records, `show` prints a mode-neutral run summary, `export` writes a redacted Markdown audit summary to `.dure/runs/<run-id>/export.md`, and `console-data` emits a redacted read-only JSON snapshot for the static UI prototype.
+
+Development runs also persist `.dure/runs/<run-id>/project-state.json`. This records file index summary, package manager evidence, detected languages/frameworks, configured `test`/`lint`/`typecheck`/`build` scripts, and a current MVP stage estimate. Dure does not execute those scripts during project state detection.
 
 Preview a persisted development patch proposal:
 
@@ -367,6 +369,7 @@ examples/                Future example projects
 
 - Agent reasoning is deterministic and rule-based.
 - Task mode routing is keyword/signal based.
+- Development project state detection is static and local; it reads manifests, lockfiles, file names, and package scripts but does not execute scripts.
 - Safety policy evaluation is deterministic and local; policy configuration is not user-editable yet.
 - Run export produces a local redacted Markdown summary; richer export formats are not implemented yet.
 - MoochackerAgent produces structured bug bounty safety guidance only; active testing, target access, and external requests are not executed.

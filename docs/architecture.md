@@ -64,7 +64,7 @@ User Natural Language Input
 
    `packages/task-modes` owns mode-specific deterministic behavior:
 
-   - Development Mode returns a `PatchProposal`.
+   - Development Mode returns a `PatchProposal` and a read-only `DevelopmentProjectState`.
    - Bug Bounty Mode returns a `BugBountyReviewProposal` with a structured `MoochackerAgent` safety assessment.
    - Documentation Mode returns a `DocumentProposal`.
    - Security Mode returns a `SecurityReviewProposal`.
@@ -76,7 +76,7 @@ User Natural Language Input
 
    Development Mode and Bug Bounty Mode are the primary product surface.
 
-   Development Mode is for MVP-first software work and controlled patch proposals.
+   Development Mode is for MVP-first software work and controlled patch proposals. In v0.1 it also performs static project state detection: file index summary, package manager evidence, language/framework signals, configured `test`/`lint`/`typecheck`/`build` scripts, and current MVP stage estimate. It does not execute scripts while detecting project state.
 
    Bug Bounty Mode is for authorized web security review planning. In v0.1 it creates only passive scope, target-map, hypothesis, evidence-ledger, and report scaffolds. It does not access targets or run active tests.
 
@@ -106,7 +106,7 @@ User Natural Language Input
 
 13. Memory / Decision Log
 
-   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, approval decisions, controlled apply records, workspace verification records, bug bounty scope intake, bug bounty evidence ledger entries, bug bounty report drafts, redacted Markdown run exports, and next recommended step.
+   `packages/memory` records assistant-level routing, selected agent team, produced proposal, safety decision, development project state, approval decisions, controlled apply records, workspace verification records, bug bounty scope intake, bug bounty evidence ledger entries, bug bounty report drafts, redacted Markdown run exports, and next recommended step.
 
 ## MVP Ladder For Development Mode
 

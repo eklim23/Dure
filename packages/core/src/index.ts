@@ -139,6 +139,70 @@ export interface MvpStage {
   readonly exitCriteria: readonly string[];
 }
 
+export type ProjectPackageManager = "pnpm" | "npm" | "yarn" | "bun" | "unknown";
+
+export type ProjectLanguage =
+  | "typescript"
+  | "javascript"
+  | "python"
+  | "rust"
+  | "go"
+  | "java"
+  | "csharp"
+  | "markdown"
+  | "json"
+  | "unknown";
+
+export type ProjectFramework =
+  | "pnpm_workspace"
+  | "node"
+  | "react"
+  | "nextjs"
+  | "vite"
+  | "express"
+  | "fastify"
+  | "vue"
+  | "svelte"
+  | "unknown";
+
+export interface ProjectFileIndex {
+  readonly root: string;
+  readonly totalFiles: number;
+  readonly sampledFiles: readonly string[];
+  readonly ignoredDirectories: readonly string[];
+}
+
+export interface ProjectLanguageSummary {
+  readonly language: ProjectLanguage;
+  readonly files: number;
+}
+
+export interface ProjectScriptSummary {
+  readonly name: "test" | "lint" | "typecheck" | "build";
+  readonly configured: boolean;
+  readonly command?: string;
+}
+
+export interface ProjectMvpStageEstimate {
+  readonly stage: MvpStage;
+  readonly confidence: number;
+  readonly rationale: string;
+  readonly evidence: readonly string[];
+}
+
+export interface DevelopmentProjectState {
+  readonly analyzedAt: string;
+  readonly workspaceRoot: string;
+  readonly fileIndex: ProjectFileIndex;
+  readonly packageManager: ProjectPackageManager;
+  readonly packageManagerEvidence: readonly string[];
+  readonly languages: readonly ProjectLanguageSummary[];
+  readonly frameworks: readonly ProjectFramework[];
+  readonly scripts: readonly ProjectScriptSummary[];
+  readonly currentMvpStage: ProjectMvpStageEstimate;
+  readonly notes: readonly string[];
+}
+
 export interface GoalState {
   readonly rawRequest: string;
   readonly inferredGoal: string;
@@ -360,6 +424,7 @@ export type DecisionLogEntryType =
   | "run_exported"
   | "patch_applied"
   | "workspace_verification_result"
+  | "development_project_state"
   | "inferred_goal"
   | "mvp_scope_decision"
   | "agent_comments"
@@ -391,6 +456,7 @@ export interface RunArtifactPaths {
   readonly decisionLog: string;
   readonly metadata: string;
   readonly verification?: string;
+  readonly projectState?: string;
   readonly workspaceVerification?: string;
   readonly approval?: string;
   readonly scope?: string;
@@ -678,6 +744,22 @@ export interface ConsoleRunSnapshot {
       readonly summary: string;
     }[];
   };
+  readonly projectState?: {
+    readonly packageManager: ProjectPackageManager;
+    readonly languages: readonly ProjectLanguageSummary[];
+    readonly frameworks: readonly ProjectFramework[];
+    readonly configuredScripts: readonly string[];
+    readonly missingScripts: readonly string[];
+    readonly currentMvpStage: {
+      readonly id: MvpStageId;
+      readonly name: string;
+      readonly confidence: number;
+      readonly rationale: string;
+    };
+    readonly fileCount: number;
+    readonly sampledFiles: readonly string[];
+    readonly notes: readonly string[];
+  };
   readonly development?: {
     readonly stage?: string;
     readonly patchChanges: readonly {
@@ -704,6 +786,7 @@ export interface ConsoleRunSnapshot {
     readonly hasEvidenceLedger: boolean;
     readonly hasReports: boolean;
     readonly hasMarkdownExport: boolean;
+    readonly hasProjectState: boolean;
   };
   readonly decisions: readonly {
     readonly type: DecisionLogEntryType;
@@ -722,6 +805,7 @@ export interface RunPreview {
   readonly proposal: TaskModeProposal;
   readonly safetyDecision: SafetyDecision;
   readonly verificationResult?: VerificationResult;
+  readonly developmentProjectState?: DevelopmentProjectState;
   readonly workspaceVerificationRecord?: WorkspaceVerificationRecord;
   readonly approvalRecord?: ApprovalRecord;
   readonly bugBountyScope?: BugBountyScopeRecord;
@@ -810,6 +894,7 @@ export interface TaskModeExecutionResult {
   readonly safetyDecision: SafetyDecision;
   readonly verificationResult?: VerificationResult;
   readonly developmentResult?: OrchestrationResult;
+  readonly developmentProjectState?: DevelopmentProjectState;
   readonly nextRecommendedAction: string;
 }
 
@@ -830,6 +915,7 @@ export interface AssistantRunResult {
   readonly safetyDecision: SafetyDecision;
   readonly verificationResult?: VerificationResult;
   readonly developmentResult?: OrchestrationResult;
+  readonly developmentProjectState?: DevelopmentProjectState;
   readonly decisionLog: DecisionLog;
   readonly runId?: string;
   readonly runRecord?: RunRecord;

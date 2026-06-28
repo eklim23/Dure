@@ -11,7 +11,9 @@ const snapshotFields = {
   run: document.querySelector("#snapshot-run"),
   status: document.querySelector("#snapshot-status"),
   proposal: document.querySelector("#snapshot-proposal"),
-  decisions: document.querySelector("#snapshot-decisions")
+  decisions: document.querySelector("#snapshot-decisions"),
+  project: document.querySelector("#snapshot-project"),
+  scripts: document.querySelector("#snapshot-scripts")
 };
 
 const details = {
@@ -439,8 +441,26 @@ function applyConsoleSnapshot(snapshot) {
   setText(snapshotFields.status, snapshot.run.status);
   setText(snapshotFields.proposal, `${snapshot.run.proposalKind} / ${snapshot.proposal.riskLevel}`);
   setText(snapshotFields.decisions, String(snapshot.decisions.length));
+  setText(snapshotFields.project, summarizeSnapshotProject(snapshot));
+  setText(snapshotFields.scripts, summarizeSnapshotScripts(snapshot));
   updateMode(runMode);
   selectAgent(snapshot.run.selectedMode === "bug_bounty" ? "moochacker" : "pm");
+}
+
+function summarizeSnapshotProject(snapshot) {
+  if (!snapshot.projectState) {
+    return "not recorded";
+  }
+  return `${snapshot.projectState.packageManager} / stage ${snapshot.projectState.currentMvpStage.id}`;
+}
+
+function summarizeSnapshotScripts(snapshot) {
+  if (!snapshot.projectState) {
+    return "not recorded";
+  }
+  return snapshot.projectState.configuredScripts.length > 0
+    ? snapshot.projectState.configuredScripts.join(", ")
+    : "none";
 }
 
 function normalizeSnapshotMode(mode) {

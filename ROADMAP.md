@@ -25,11 +25,12 @@
 - Open-source baseline: CI, issue/PR templates, license, demo transcript, release checklist, and architecture diagram
 - Read-only Dure Console static UI prototype for agent activity visualization
 - Redacted console-data JSON export and UI import for persisted run inspection
+- Development Mode project state detection for package manager, languages, frameworks, scripts, and MVP stage estimate
 
 ## v0.2
 
 - Real LLM provider interface wiring
-- Project file indexing
+- Deeper project file indexing and framework-specific detectors
 - Evidence ledger and report draft update/edit commands
 - Configurable export formats and destinations
 - Richer Development Mode project-state detection

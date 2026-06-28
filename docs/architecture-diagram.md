@@ -14,6 +14,7 @@ flowchart TD
   TaskModes --> Supporting["Supporting Modes"]
 
   Development --> Orchestrator["packages/orchestrator"]
+  Development --> ProjectState["DevelopmentProjectState static detector"]
   Orchestrator --> Council["packages/council"]
   Orchestrator --> BuilderRuntime["packages/builder-runtime"]
   BuilderRuntime --> Sandbox["packages/sandbox"]
@@ -31,6 +32,7 @@ flowchart TD
   AssistantCore --> Memory["packages/memory"]
   Memory --> Runs[".dure/runs/<run-id>"]
   Runs --> DecisionLog["decision-log.jsonl"]
+  Runs --> ProjectStateJson["project-state.json"]
   Runs --> Export["export.md"]
   Runs --> ConsoleData["console-data JSON"]
   ConsoleData --> UI
@@ -45,6 +47,7 @@ flowchart TD
 - `packages/core` owns shared types.
 - `packages/assistant-core` coordinates routing, mode execution, safety decision persistence, and run records.
 - `packages/task-modes` produces deterministic proposals.
+- Development project state detection is static and local; it reads metadata but does not execute scripts.
 - `packages/safety-policy` decides whether capabilities are allowed, warning-only, or blocked.
 - `packages/memory` persists run artifacts and redacted Markdown exports.
 - `packages/verifier` performs proposal-time and approved-workspace verification.

@@ -38,7 +38,10 @@ export class AssistantCore {
       assumptions: context.assumptions
     });
 
-    const modeResult = this.modes.execute(context);
+    const modeResult = this.modes.execute(context, {
+      workspaceRoot: options.workspaceRoot,
+      now
+    });
 
     log.append("selected_agent_team", "Mode-specific agent team was selected.", {
       selectedAgentTeam: modeResult.selectedAgentTeam
@@ -53,6 +56,15 @@ export class AssistantCore {
     if (modeResult.proposal.kind === "bug_bounty_review") {
       log.append("agent_comments", "MoochackerAgent produced a structured bug bounty safety assessment.", {
         moochackerAssessment: modeResult.proposal.moochackerAssessment
+      });
+    }
+    if (modeResult.developmentProjectState) {
+      log.append("development_project_state", "Development Mode analyzed the local project state without executing commands.", {
+        packageManager: modeResult.developmentProjectState.packageManager,
+        languages: modeResult.developmentProjectState.languages,
+        frameworks: modeResult.developmentProjectState.frameworks,
+        scripts: modeResult.developmentProjectState.scripts,
+        currentMvpStage: modeResult.developmentProjectState.currentMvpStage
       });
     }
     log.append("safety_decision", "Safety decision was recorded before any controlled action.", {
@@ -70,6 +82,7 @@ export class AssistantCore {
       safetyDecision: modeResult.safetyDecision,
       verificationResult: modeResult.verificationResult,
       developmentResult: modeResult.developmentResult,
+      developmentProjectState: modeResult.developmentProjectState,
       decisionLog: log.toDecisionLog(),
       nextRecommendedAction: modeResult.nextRecommendedAction
     };
@@ -82,6 +95,7 @@ export class AssistantCore {
         proposal: result.proposal,
         safetyDecision: result.safetyDecision,
         verificationResult: result.verificationResult,
+        developmentProjectState: result.developmentProjectState,
         decisionLog: result.decisionLog,
         nextRecommendedAction: result.nextRecommendedAction,
         now
@@ -103,4 +117,5 @@ export interface AssistantRunOptions {
   readonly modeOverride?: TaskMode;
   readonly persist?: boolean;
   readonly runStoreRoot?: string;
+  readonly workspaceRoot?: string;
 }

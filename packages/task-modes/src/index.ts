@@ -15,15 +15,22 @@ import type {
 import { createStableId } from "@dure/core";
 import { DureOrchestrator } from "@dure/orchestrator";
 import { SafetyPolicyEngine } from "@dure/safety-policy";
+import { DevelopmentProjectAnalyzer } from "./development-project-state";
+
+export interface TaskModeRunnerOptions {
+  readonly workspaceRoot?: string;
+  readonly now?: Date;
+}
 
 export class TaskModeRunner {
   private readonly developmentOrchestrator = new DureOrchestrator();
+  private readonly developmentProjectAnalyzer = new DevelopmentProjectAnalyzer();
   private readonly safetyPolicy = new SafetyPolicyEngine();
 
-  execute(context: AssistantRequestContext): TaskModeExecutionResult {
+  execute(context: AssistantRequestContext, options: TaskModeRunnerOptions = {}): TaskModeExecutionResult {
     switch (context.selectedMode) {
       case "development":
-        return this.runDevelopmentMode(context);
+        return this.runDevelopmentMode(context, options);
       case "bug_bounty":
         return buildStaticModeResult(
           context,
@@ -43,8 +50,12 @@ export class TaskModeRunner {
     }
   }
 
-  private runDevelopmentMode(context: AssistantRequestContext): TaskModeExecutionResult {
+  private runDevelopmentMode(context: AssistantRequestContext, options: TaskModeRunnerOptions): TaskModeExecutionResult {
     const developmentResult = this.developmentOrchestrator.run(context.originalInput);
+    const developmentProjectState = this.developmentProjectAnalyzer.analyze({
+      workspaceRoot: options.workspaceRoot,
+      now: options.now
+    });
     const selectedAgentTeam: readonly AssistantAgentRole[] = developmentResult.goalState.requiredAgents;
     const safetyDecision = this.safetyPolicy.evaluate({
       context,
@@ -59,6 +70,7 @@ export class TaskModeRunner {
       safetyDecision,
       verificationResult: developmentResult.verificationResult,
       developmentResult,
+      developmentProjectState,
       nextRecommendedAction: developmentResult.nextRecommendedAction
     };
   }
