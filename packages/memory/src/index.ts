@@ -12,6 +12,10 @@ import {
 import path from "node:path";
 import type {
   AppliedPatchFile,
+  ApplyPreflight,
+  ApplyPreflightCheck,
+  ApplyPreflightFilePlan,
+  ApplyPreflightSummary,
   ApprovalCapabilityDecision,
   ApplyRecord,
   ApprovalDecision,
@@ -492,8 +496,14 @@ export class RunStore {
     }
 
     const workspaceRoot = path.resolve(input.workspaceRoot ?? path.join(this.root, "..", "workspaces", runId));
+    assertSafeWorkspaceRoot(workspaceRoot, this.root, preview.artifactPaths.runDir);
     const backupRoot = path.join(preview.artifactPaths.runDir, "backups", createApplyTimestamp(now), "files");
     const changes = preview.proposal.changes.map((change) => preparePatchChange(change, workspaceRoot, backupRoot));
+    const preflight = buildApplyPreflight(preview, workspaceRoot, backupRoot, changes, now);
+    const blockedCheck = preflight.checks.find((check) => check.status === "blocked");
+    if (blockedCheck) {
+      throw new Error(`Run ${runId} cannot be applied; ${blockedCheck.summary}`);
+    }
 
     mkdirSync(workspaceRoot, { recursive: true });
     mkdirSync(backupRoot, { recursive: true });
@@ -529,6 +539,8 @@ export class RunStore {
       createdAt: now.toISOString(),
       workspaceRoot,
       backupRoot,
+      preflight,
+      summary: preflight.summary,
       previousStatus: preview.metadata.status,
       nextStatus: "applied",
       files: appliedFiles,
@@ -563,6 +575,14 @@ export class RunStore {
         proposalId: applyRecord.proposalId,
         workspaceRoot,
         backupRoot,
+        preflight: {
+          summary: preflight.summary,
+          checks: preflight.checks.map((check) => ({
+            id: check.id,
+            status: check.status,
+            summary: check.summary
+          }))
+        },
         files: appliedFiles.map((file) => ({
           path: file.path,
           operation: file.operation,
@@ -1155,6 +1175,87 @@ function readReportDrafts(reportsDir: string): readonly BugBountyReportDraftReco
   }
 }
 
+function buildApplyPreflight(
+  preview: RunPreview,
+  workspaceRoot: string,
+  backupRoot: string,
+  changes: readonly PreparedPatchChange[],
+  now: Date
+): ApplyPreflight {
+  const files = changes.map((change) => buildApplyPreflightFilePlan(change));
+  const summary = buildApplyPreflightSummary(files);
+  const checks: ApplyPreflightCheck[] = [
+    {
+      id: "approval-record",
+      status: preview.approvalRecord?.decision === "approved" ? "passed" : "blocked",
+      summary: preview.approvalRecord?.decision === "approved"
+        ? "Run has an approved approval record."
+        : "Run does not have an approved approval record."
+    },
+    {
+      id: "approval-expiration",
+      status: isExpiredApproval(preview.approvalRecord?.expiresAt, now) ? "blocked" : "passed",
+      summary: preview.approvalRecord?.expiresAt
+        ? `Approval is valid until ${preview.approvalRecord.expiresAt}.`
+        : "Approval has no expiration timestamp; legacy approvals remain accepted in v0.1."
+    },
+    {
+      id: "proposal-verification",
+      status: preview.verificationResult?.accepted === true ? "passed" : "blocked",
+      summary: preview.verificationResult?.accepted === true
+        ? "Proposal-time verification accepted this patch."
+        : "Proposal-time verification has not accepted this patch."
+    },
+    {
+      id: "workspace-root",
+      status: "passed",
+      summary: `Workspace root is controlled and outside the run store: ${workspaceRoot}.`
+    },
+    {
+      id: "allowed-operations",
+      status: changes.every((change) => change.operation === "create" || change.operation === "modify")
+        ? "passed"
+        : "blocked",
+      summary: "Controlled apply allows create and modify operations only."
+    },
+    {
+      id: "file-plan",
+      status: files.length > 0 ? "passed" : "blocked",
+      summary: `Prepared ${summary.totalFiles} file change${summary.totalFiles === 1 ? "" : "s"} with ${summary.backupsPlanned} backup${summary.backupsPlanned === 1 ? "" : "s"} planned.`
+    }
+  ];
+
+  return {
+    checkedAt: now.toISOString(),
+    workspaceRoot,
+    backupRoot,
+    approvalExpiresAt: preview.approvalRecord?.expiresAt,
+    checks,
+    files,
+    summary
+  };
+}
+
+function buildApplyPreflightFilePlan(change: PreparedPatchChange): ApplyPreflightFilePlan {
+  return {
+    path: change.relativePath,
+    operation: change.operation,
+    targetPath: change.targetPath,
+    previousExists: change.previousExists,
+    backupPlanned: change.backupPath !== undefined,
+    proposedHash: sha256(Buffer.from(change.content, "utf8"))
+  };
+}
+
+function buildApplyPreflightSummary(files: readonly ApplyPreflightFilePlan[]): ApplyPreflightSummary {
+  return {
+    totalFiles: files.length,
+    creates: files.filter((file) => file.operation === "create").length,
+    modifies: files.filter((file) => file.operation === "modify").length,
+    backupsPlanned: files.filter((file) => file.backupPlanned).length
+  };
+}
+
 interface PreparedPatchChange {
   readonly relativePath: string;
   readonly operation: "create" | "modify";
@@ -1203,6 +1304,30 @@ function preparePatchChange(change: PatchChange, workspaceRoot: string, backupRo
   };
 }
 
+function assertSafeWorkspaceRoot(workspaceRoot: string, runStoreRoot: string, runDir: string): void {
+  const resolvedWorkspaceRoot = path.resolve(workspaceRoot);
+  const resolvedRunStoreRoot = path.resolve(runStoreRoot);
+  const resolvedRunDir = path.resolve(runDir);
+
+  if (isPathInside(resolvedRunStoreRoot, resolvedWorkspaceRoot) || isPathInside(resolvedRunDir, resolvedWorkspaceRoot)) {
+    throw new Error(`Workspace root must be outside the run store: ${workspaceRoot}`);
+  }
+  if (path.basename(resolvedWorkspaceRoot) === ".git" || resolvedWorkspaceRoot.split(path.sep).includes(".git")) {
+    throw new Error(`Workspace root must not be inside a git metadata directory: ${workspaceRoot}`);
+  }
+  if (existsSync(resolvedWorkspaceRoot)) {
+    const rootStat = lstatSync(resolvedWorkspaceRoot);
+    if (rootStat.isSymbolicLink()) {
+      throw new Error(`Workspace root must not be a symbolic link: ${workspaceRoot}`);
+    }
+    if (!rootStat.isDirectory()) {
+      throw new Error(`Workspace root must be a directory: ${workspaceRoot}`);
+    }
+  }
+
+  assertNoSymlinkInExistingPath(resolvedWorkspaceRoot);
+}
+
 function isSafePatchPath(candidate: string): boolean {
   if (candidate.trim().length === 0) {
     return false;
@@ -1226,6 +1351,23 @@ function isSamePath(left: string, right: string): boolean {
   return process.platform === "win32"
     ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
     : normalizedLeft === normalizedRight;
+}
+
+function assertNoSymlinkInExistingPath(targetPath: string): void {
+  const resolved = path.resolve(targetPath);
+  const parsed = path.parse(resolved);
+  const segments = path.relative(parsed.root, resolved).split(path.sep).filter((segment) => segment.length > 0);
+  let current = parsed.root;
+
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    if (!existsSync(current)) {
+      return;
+    }
+    if (lstatSync(current).isSymbolicLink()) {
+      throw new Error(`Workspace path uses a symbolic link and is not allowed: ${targetPath}`);
+    }
+  }
 }
 
 function assertNoSymlinkAncestor(root: string, targetPath: string): void {

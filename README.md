@@ -120,7 +120,7 @@ corepack pnpm cli -- apply <run-id>
 corepack pnpm cli -- apply <run-id> --workspace C:\path\to\controlled-workspace
 ```
 
-Without `--workspace`, Dure applies into `.dure/workspaces/<run-id>`. Apply requires an approved, verified patch proposal, writes only create/modify operations, blocks deletes and unsafe paths, records `apply.json` and `rollback.json`, and does not run verification or git commands.
+Without `--workspace`, Dure applies into `.dure/workspaces/<run-id>`. Apply requires an approved, unexpired, verified patch proposal, runs a local preflight, writes only create/modify operations, blocks deletes, unsafe paths, unsafe workspace roots, and symlinked paths, records `apply.json` and `rollback.json`, and does not run verification or git commands.
 
 Verify an applied workspace:
 
@@ -305,6 +305,12 @@ Run:
   - previous status: approved
   - new status: applied
 
+Preflight:
+  - checks passed: 6/6
+  - creates: 2
+  - modifies: 0
+  - backups planned: 0
+
 Changes:
   - create: package.json
   - create: src/index.js
@@ -392,7 +398,7 @@ examples/                Future example projects
 - Bug bounty evidence records are user-supplied ledger entries; Dure does not prove, reproduce, or actively test findings in v0.1.
 - Bug bounty report drafts are generated from stored evidence only; Dure does not validate findings, submit reports, or contact targets.
 - Approval records are durable gates for later controlled apply; approval itself does not modify files and expires before stale apply operations.
-- Controlled apply writes only approved patch content into a controlled workspace and records rollback metadata, but rollback execution is not implemented yet.
+- Controlled apply writes only approved patch content into a controlled workspace after preflight checks and records rollback metadata, but rollback execution is not implemented yet.
 - Proposal-time test, lint, and typecheck checks are placeholders.
 - Applied workspace verification can run allow-listed `test`, `lint`, and `typecheck` package scripts only.
 - Dependency audit remains a placeholder and never contacts registries in v0.1.

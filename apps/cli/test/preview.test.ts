@@ -165,6 +165,10 @@ test("apply command writes an approved patch to a controlled workspace", async (
   assert.equal(applied.status, 0, applied.stderr);
   assert.match(applied.stdout, /Dure Apply/);
   assert.match(applied.stdout, /new status: applied/);
+  assert.match(applied.stdout, /Preflight/);
+  assert.match(applied.stdout, /checks passed: 6\/6/);
+  assert.match(applied.stdout, /creates: 1/);
+  assert.match(applied.stdout, /backup root:/);
   assert.ok(existsSync(targetFile));
   assert.match(await readFile(targetFile, "utf8"), /generated-cli-mvp/);
   assert.equal(preview.status, 0, preview.stderr);

@@ -271,8 +271,16 @@ test("run store applies an approved patch to a controlled workspace", async () =
   const appliedFile = path.join(tempRoot, ".dure", "workspaces", record.id, "package.json");
 
   assert.equal(applied.nextStatus, "applied");
+  assert.equal(applied.summary.totalFiles, 1);
+  assert.equal(applied.summary.creates, 1);
+  assert.equal(applied.summary.modifies, 0);
+  assert.equal(applied.preflight.summary.totalFiles, 1);
+  assert.ok(applied.preflight.checks.every((check) => check.status === "passed"));
+  assert.equal(applied.preflight.files[0].path, "package.json");
+  assert.equal(applied.preflight.files[0].backupPlanned, false);
   assert.equal(preview.metadata.status, "applied");
   assert.equal(preview.applyRecord?.runId, record.id);
+  assert.equal(preview.applyRecord?.preflight.summary.creates, 1);
   assert.equal(preview.rollbackRecord?.rollbackImplemented, false);
   assert.ok(existsSync(appliedFile));
   assert.equal(preview.decisionLog.entries.at(-1)?.type, "patch_applied");
@@ -447,6 +455,10 @@ test("run store backs up modified files during apply", async () => {
   const backupPath = modified.backupPath;
 
   assert.equal(modified.operation, "modify");
+  assert.equal(applied.summary.modifies, 1);
+  assert.equal(applied.summary.backupsPlanned, 1);
+  assert.equal(applied.preflight.files[0].previousExists, true);
+  assert.equal(applied.preflight.files[0].backupPlanned, true);
   assert.ok(backupPath);
   assert.ok(existsSync(backupPath));
   assert.equal(await readFile(backupPath, "utf8"), "old content\n");
@@ -493,6 +505,31 @@ test("run store rejects unsafe apply requests", async () => {
   store.approveRun(deletion.id, { confirmRisk: "medium", now: new Date("2026-06-27T00:00:22.000Z") });
   assert.throws(() => store.applyRun(unsafe.id), /Unsafe patch path/);
   assert.throws(() => store.applyRun(deletion.id), /Delete operation is not allowed/);
+});
+
+test("run store rejects unsafe controlled workspace roots", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-apply-root-reject-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const record = store.persistRun({
+    context: developmentContextFixture(),
+    selectedAgentTeam: ["BuilderAgent", "ReviewerAgent"],
+    proposal: patchProposalFixture(),
+    safetyDecision: safetyFixture(),
+    verificationResult: verificationFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Preview the patch before approval.",
+    now: new Date("2026-06-27T00:00:39.000Z")
+  });
+
+  store.approveRun(record.id, { confirmRisk: "medium", now: new Date("2026-06-27T00:00:40.000Z") });
+
+  assert.throws(
+    () => store.applyRun(record.id, {
+      workspaceRoot: path.join(tempRoot, ".dure", "runs", record.id, "workspace"),
+      now: new Date("2026-06-27T00:00:41.000Z")
+    }),
+    /outside the run store/
+  );
 });
 
 test("run store records bug bounty scope intake", async () => {

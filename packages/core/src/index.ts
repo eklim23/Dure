@@ -666,6 +666,40 @@ export interface AppliedPatchFile {
   readonly newHash: string;
 }
 
+export type ApplyPreflightCheckStatus = "passed" | "blocked";
+
+export interface ApplyPreflightCheck {
+  readonly id: string;
+  readonly status: ApplyPreflightCheckStatus;
+  readonly summary: string;
+}
+
+export interface ApplyPreflightFilePlan {
+  readonly path: string;
+  readonly operation: "create" | "modify";
+  readonly targetPath: string;
+  readonly previousExists: boolean;
+  readonly backupPlanned: boolean;
+  readonly proposedHash: string;
+}
+
+export interface ApplyPreflightSummary {
+  readonly totalFiles: number;
+  readonly creates: number;
+  readonly modifies: number;
+  readonly backupsPlanned: number;
+}
+
+export interface ApplyPreflight {
+  readonly checkedAt: string;
+  readonly workspaceRoot: string;
+  readonly backupRoot: string;
+  readonly approvalExpiresAt?: string;
+  readonly checks: readonly ApplyPreflightCheck[];
+  readonly files: readonly ApplyPreflightFilePlan[];
+  readonly summary: ApplyPreflightSummary;
+}
+
 export interface ApplyRecord {
   readonly runId: string;
   readonly proposalId: string;
@@ -673,6 +707,8 @@ export interface ApplyRecord {
   readonly createdAt: string;
   readonly workspaceRoot: string;
   readonly backupRoot: string;
+  readonly preflight: ApplyPreflight;
+  readonly summary: ApplyPreflightSummary;
   readonly previousStatus: RunStatus;
   readonly nextStatus: "applied";
   readonly files: readonly AppliedPatchFile[];

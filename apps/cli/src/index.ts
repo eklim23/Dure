@@ -1138,10 +1138,25 @@ function printApply(record: ApplyRecord): void {
     `new status: ${record.nextStatus}`,
     `proposal: ${record.proposalId}`
   ]);
-  section("Workspace", [`root: ${record.workspaceRoot}`]);
+  section("Workspace", [`root: ${record.workspaceRoot}`, `backup root: ${record.backupRoot}`]);
+  section("Preflight", [
+    `checked at: ${record.preflight.checkedAt}`,
+    `approval expires: ${record.preflight.approvalExpiresAt ?? "not recorded"}`,
+    `checks passed: ${record.preflight.checks.filter((check) => check.status === "passed").length}/${record.preflight.checks.length}`,
+    `creates: ${record.summary.creates}`,
+    `modifies: ${record.summary.modifies}`,
+    `backups planned: ${record.summary.backupsPlanned}`
+  ]);
+  section(
+    "Preflight Checks",
+    record.preflight.checks.map((check) => `${check.status}: ${check.id} - ${check.summary}`)
+  );
   section(
     "Changes",
-    record.files.map((file) => `${file.operation}: ${file.path}`)
+    record.files.map((file) => {
+      const backup = file.backupPath ? `, backup: ${file.backupPath}` : "";
+      return `${file.operation}: ${file.path} -> ${file.targetPath}${backup}`;
+    })
   );
   section("Rollback", [
     "metadata: apply.json and rollback.json",
