@@ -146,7 +146,7 @@ corepack pnpm cli -- target-map <run-id>
 corepack pnpm cli -- target-map <run-id> --host "api.example.com" --app "Public API" --api-base "https://api.example.com/v1" --auth-state "authenticated" --role-access "user|authenticated|GET /v1/orders/{id}|GET /admin|Owned test user only" --endpoint "GET|api.example.com|/v1/orders/{id}|authenticated|user|false|none|id|||Read order detail" --artifact "user supplied OpenAPI excerpt"
 ```
 
-Target maps require a sufficient scope intake and write `.dure/runs/<run-id>/target-map.json`. They record hosts, apps, API bases, auth states, role access, endpoints, state-changing actions, file upload/download flows, redirects, third-party integrations, source artifacts, out-of-scope references, redaction metadata, and next recommended actions. Dure builds this only from user-supplied artifacts and makes no requests in v0.1.
+Target maps require a sufficient scope intake and write `.dure/runs/<run-id>/target-map.json`. They record hosts, apps, API bases, auth states, role access, endpoints, state-changing actions, file upload/download flows, redirects, third-party integrations, source artifacts, out-of-scope references, redaction metadata, and next recommended actions. Dure builds this only from user-supplied artifacts and makes no requests in v0.1. The safety policy treats passive target-map recording separately from automated target mapping, which remains blocked as an external placeholder.
 
 Record or list bug bounty evidence leads:
 
@@ -155,7 +155,7 @@ corepack pnpm cli -- evidence <run-id>
 corepack pnpm cli -- evidence <run-id> --status testing --asset "api.example.com" --endpoint "/v1/orders/{id}" --method GET --role "user" --hypothesis "Possible object-level authorization issue" --impact "Potential cross-account order detail exposure" --confidence medium --scope-note "api.example.com and /v1/* are in scope" --next-action "Confirm safely with owned test accounts"
 ```
 
-Evidence entries are append-only records in `.dure/runs/<run-id>/evidence-ledger.jsonl`. Dure records lead id, hypothesis, status, request/response placeholders, impact, confidence, scope notes, and next action. It applies redaction before persistence and does not send HTTP requests, run scanners, access targets, or validate findings in v0.1.
+Evidence entries are append-only records in `.dure/runs/<run-id>/evidence-ledger.jsonl`. Dure records lead id, hypothesis, status, request/response placeholders, impact, confidence, scope notes, and next action. It applies redaction before persistence and does not send HTTP requests, run scanners, access targets, or validate findings in v0.1. If a recorded target map contains out-of-scope references, Dure blocks normal evidence recording and allows only `blocked` audit notes.
 
 Draft or list bug bounty reports:
 
@@ -164,7 +164,7 @@ corepack pnpm cli -- report <run-id>
 corepack pnpm cli -- report <run-id> --lead <lead-id> --severity medium --title "Confirmed cross-account order detail exposure"
 ```
 
-Report drafts are generated from existing evidence ledger entries only. Dure writes `.dure/runs/<run-id>/reports/<report-id>.json` and `.md`, calibrates severity conservatively, blocks high or critical severity for unconfirmed leads, and does not validate, reproduce, submit, or disclose findings in v0.1.
+Report drafts are generated from existing evidence ledger entries only. Dure writes `.dure/runs/<run-id>/reports/<report-id>.json` and `.md`, calibrates severity conservatively, blocks high or critical severity for unconfirmed leads, blocks reports when the target-map safety gate is unsafe, and does not validate, reproduce, submit, or disclose findings in v0.1.
 
 ## UI Prototype
 

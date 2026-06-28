@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@dure/core": "workspace:*",
+    "@dure/safety-policy": "workspace:*",
     "@dure/verifier": "workspace:*"
   }
 }

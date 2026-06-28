@@ -75,6 +75,9 @@ importers:
       '@dure/core':
         specifier: workspace:*
         version: link:../core
+      '@dure/safety-policy':
+        specifier: workspace:*
+        version: link:../safety-policy
       '@dure/verifier':
         specifier: workspace:*
         version: link:../verifier

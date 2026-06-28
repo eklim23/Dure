@@ -55,6 +55,7 @@ Dure assumes autonomous coding systems can create real security, stability, and 
 - Untrusted skills cannot be loaded automatically.
 - Bug Bounty Mode produces passive plans only until scope and authorization are confirmed.
 - Bug bounty target maps are user-supplied records only and do not discover, crawl, scan, or contact targets.
+- Target-map out-of-scope references block normal evidence recording and report drafting.
 - Bug bounty evidence must avoid real user data and redact sensitive artifacts.
 
 ## Out Of Scope In v0.1

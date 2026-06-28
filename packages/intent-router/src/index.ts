@@ -18,6 +18,7 @@ const CAPABILITIES: Record<TaskMode, readonly Capability[]> = {
   bug_bounty: [
     "confirm_bug_bounty_scope",
     "review_program_rules",
+    "record_passive_target_map",
     "map_targets_placeholder",
     "collect_evidence_placeholder",
     "draft_finding_report"

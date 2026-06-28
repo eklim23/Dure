@@ -16,6 +16,7 @@ Use this checklist before tagging a Dure release.
 - [ ] Smoke: `corepack pnpm cli -- --mode development "Create a tiny CLI app"`
 - [ ] Smoke: `corepack pnpm cli -- --mode bug-bounty "Prepare an authorized bug bounty scope and evidence plan"`
 - [ ] Smoke: record `scope` and `target-map` for the bug bounty run using only user-supplied passive data.
+- [ ] Smoke: unsafe target-map references block non-blocked `evidence` and `report` actions.
 - [ ] Smoke: `corepack pnpm cli -- runs --limit 5`
 
 ## Documentation

@@ -65,6 +65,7 @@ import type {
   WorkspaceVerificationRecord,
   WorkspaceVerificationScriptName
 } from "@dure/core";
+import { evaluateBugBountyRunGate } from "@dure/safety-policy";
 import { WorkspaceVerifier } from "@dure/verifier";
 
 const DEFAULT_APPROVAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -413,6 +414,15 @@ export class RunStore {
     if (preview.bugBountyScope.moochackerAssessment.scopeStatus !== "sufficient" && input.evidence.status !== "blocked") {
       throw new Error(`Run ${runId} can only record blocked evidence until scope intake is sufficient.`);
     }
+    const runGate = evaluateBugBountyRunGate({
+      action: "record_evidence",
+      scope: preview.bugBountyScope,
+      targetMap: preview.bugBountyTargetMap,
+      evidence: input.evidence
+    });
+    if (!runGate.allowed) {
+      throw new Error(`Run ${runId} cannot record evidence; ${runGate.blockedReasons.join(" ")}`);
+    }
 
     const normalized = normalizeEvidence(input.evidence);
     const redacted = redactEvidence(normalized);
@@ -432,7 +442,8 @@ export class RunStore {
       safetyNotes: [
         "Passive evidence ledger record only; Dure did not contact the target.",
         "Program scope and rules override this record.",
-        "Use placeholders for credentials, tokens, personal data, and real user data."
+        "Use placeholders for credentials, tokens, personal data, and real user data.",
+        ...runGate.warningReasons.map((reason) => `Safety gate warning: ${reason}`)
       ]
     };
     const evidencePath = path.join(preview.artifactPaths.runDir, "evidence-ledger.jsonl");
@@ -450,6 +461,11 @@ export class RunStore {
         method: record.method,
         confidence: record.confidence,
         redactedFields: record.redactedFields,
+        runGate: {
+          allowed: runGate.allowed,
+          warnings: runGate.warningReasons,
+          checks: runGate.checks
+        },
         nextAction: record.nextAction
       },
       timestamp: now.toISOString()
@@ -474,6 +490,15 @@ export class RunStore {
     }
     if (lead.status === "blocked" || lead.status === "non-issue") {
       throw new Error(`Run ${runId} cannot draft a finding report from a ${lead.status} lead.`);
+    }
+    const runGate = evaluateBugBountyRunGate({
+      action: "draft_report",
+      scope: preview.bugBountyScope,
+      targetMap: preview.bugBountyTargetMap,
+      evidence: lead
+    });
+    if (!runGate.allowed) {
+      throw new Error(`Run ${runId} cannot draft a report; ${runGate.blockedReasons.join(" ")}`);
     }
 
     const severity = input.draft.severity ?? calibrateSeverity(lead);
@@ -526,7 +551,8 @@ export class RunStore {
       safetyNotes: [
         "Report draft is generated from existing ledger evidence only.",
         "Dure did not send requests, scan targets, exploit issues, or validate the finding.",
-        "Review program rules and remove sensitive data before submission."
+        "Review program rules and remove sensitive data before submission.",
+        ...runGate.warningReasons.map((reason) => `Safety gate warning: ${reason}`)
       ],
       nextRecommendedAction: "Review the draft, confirm evidence and severity, then export or revise before submission."
     };
@@ -544,7 +570,12 @@ export class RunStore {
         severity: record.severity,
         confidence: record.confidence,
         duplicateRisk: record.duplicateRisk,
-        markdownPath: record.markdownPath
+        markdownPath: record.markdownPath,
+        runGate: {
+          allowed: runGate.allowed,
+          warnings: runGate.warningReasons,
+          checks: runGate.checks
+        }
       },
       timestamp: now.toISOString()
     } satisfies DecisionLogEntry);

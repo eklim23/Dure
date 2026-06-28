@@ -24,6 +24,7 @@ export type Capability =
   | "propose_file_changes"
   | "run_tests_placeholder"
   | "confirm_bug_bounty_scope"
+  | "record_passive_target_map"
   | "map_targets_placeholder"
   | "review_program_rules"
   | "collect_evidence_placeholder"

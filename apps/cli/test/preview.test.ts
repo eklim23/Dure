@@ -350,6 +350,82 @@ test("target-map command records and lists passive bug bounty target maps", asyn
   assert.ok(existsSync(targetMapPath));
 });
 
+test("target-map safety gate blocks non-blocked evidence when map is unsafe", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-target-map-gate-"));
+  const record = persistRun(tempRoot, bugBountyProposalFixture(), "bug_bounty");
+
+  assert.equal(runCli(tempRoot, [
+    "scope",
+    record.id,
+    "--target",
+    "api.example.com",
+    "--in-scope",
+    "api.example.com,/v1/*",
+    "--out-of-scope",
+    "admin.example.com",
+    "--allowed",
+    "read-only authorization checks",
+    "--forbidden",
+    "DoS,brute force",
+    "--rate-limit",
+    "10 requests per minute",
+    "--roles",
+    "user",
+    "--data",
+    "redact tokens and personal data",
+    "--authorization-note",
+    "Program scope supplied by user"
+  ]).status, 0);
+  assert.equal(runCli(tempRoot, [
+    "target-map",
+    record.id,
+    "--host",
+    "api.example.com",
+    "--host",
+    "admin.example.com",
+    "--app",
+    "Public API",
+    "--api-base",
+    "https://api.example.com/v1",
+    "--auth-state",
+    "authenticated",
+    "--role-access",
+    "user|authenticated|GET /v1/orders/{id}|GET /admin|Owned test user only",
+    "--endpoint",
+    "GET|api.example.com|/v1/orders/{id}|authenticated|user|false|none|id|||Read order detail",
+    "--artifact",
+    "user supplied OpenAPI excerpt"
+  ]).status, 0);
+
+  const evidence = runCli(tempRoot, [
+    "evidence",
+    record.id,
+    "--status",
+    "testing",
+    "--asset",
+    "api.example.com",
+    "--endpoint",
+    "/v1/orders/123",
+    "--method",
+    "GET",
+    "--role",
+    "user",
+    "--hypothesis",
+    "A user may be able to read another user's order detail.",
+    "--impact",
+    "Potential cross-account order detail exposure.",
+    "--confidence",
+    "medium",
+    "--scope-note",
+    "api.example.com and /v1/* are in scope.",
+    "--next-action",
+    "Confirm with owned test accounts."
+  ]);
+
+  assert.notEqual(evidence.status, 0);
+  assert.match(evidence.stderr, /Target map safety gate blocked progress/);
+});
+
 test("evidence command records and lists bug bounty evidence leads", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-cli-evidence-"));
   const record = persistRun(tempRoot, bugBountyProposalFixture(), "bug_bounty");

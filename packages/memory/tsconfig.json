@@ -9,6 +9,7 @@
   "include": ["src/**/*.ts", "test/**/*.ts"],
   "references": [
     { "path": "../core" },
+    { "path": "../safety-policy" },
     { "path": "../verifier" }
   ]
 }

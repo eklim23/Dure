@@ -1,6 +1,12 @@
 import type {
   AssistantRequestContext,
+  BugBountyEvidenceInput,
+  BugBountyEvidenceRecord,
   BugBountyReviewProposal,
+  BugBountyScopeBoundary,
+  BugBountyScopeRecord,
+  BugBountyTargetEndpoint,
+  BugBountyTargetMapRecord,
   Capability,
   CapabilityDefinition,
   ModeSafetyPolicy,
@@ -23,6 +29,32 @@ export interface RedactionResult {
   readonly value: string;
   readonly redacted: boolean;
   readonly appliedRules: readonly string[];
+}
+
+export type BugBountyRunGateAction = "record_evidence" | "draft_report";
+
+export type BugBountyRunGateCheckStatus = "passed" | "warning" | "blocked";
+
+export interface BugBountyRunGateCheck {
+  readonly id: string;
+  readonly status: BugBountyRunGateCheckStatus;
+  readonly summary: string;
+}
+
+export interface BugBountyRunGateInput {
+  readonly action: BugBountyRunGateAction;
+  readonly scope?: BugBountyScopeRecord;
+  readonly targetMap?: BugBountyTargetMapRecord;
+  readonly evidence?: BugBountyEvidenceInput | BugBountyEvidenceRecord;
+}
+
+export interface BugBountyRunGateDecision {
+  readonly action: BugBountyRunGateAction;
+  readonly allowed: boolean;
+  readonly checks: readonly BugBountyRunGateCheck[];
+  readonly blockedReasons: readonly string[];
+  readonly warningReasons: readonly string[];
+  readonly nextRecommendedAction: string;
 }
 
 export const REDACTION_RULES: readonly SafetyPolicyRedactionRule[] = [
@@ -107,6 +139,14 @@ export const CAPABILITY_REGISTRY: Record<Capability, CapabilityDefinition> = {
   review_program_rules: {
     capability: "review_program_rules",
     summary: "Review user-provided program rules without contacting targets.",
+    executionKind: "proposal_only",
+    placeholder: false,
+    requiresApproval: true,
+    activeTesting: false
+  },
+  record_passive_target_map: {
+    capability: "record_passive_target_map",
+    summary: "Record a passive target map from user-supplied artifacts only.",
     executionKind: "proposal_only",
     placeholder: false,
     requiresApproval: true,
@@ -228,6 +268,7 @@ const MODE_POLICIES: Record<TaskMode, ModeSafetyPolicy> = {
     allowedCapabilities: [
       "confirm_bug_bounty_scope",
       "review_program_rules",
+      "record_passive_target_map",
       "map_targets_placeholder",
       "collect_evidence_placeholder",
       "draft_finding_report"
@@ -236,6 +277,7 @@ const MODE_POLICIES: Record<TaskMode, ModeSafetyPolicy> = {
     requiresApproval: true,
     stopConditions: [
       "Scope, authorization, or program rules are unclear.",
+      "The target map references out-of-scope assets or unclear third-party systems.",
       "The next step could affect availability, billing, production data, or other users.",
       "The test requires bypassing rate limits, evading detection, persistence, or destructive testing.",
       "Evidence suggests access to real secrets, personal data, or privileged systems.",
@@ -411,6 +453,21 @@ export function redactSensitiveText(value: string): RedactionResult {
   };
 }
 
+export function evaluateBugBountyRunGate(input: BugBountyRunGateInput): BugBountyRunGateDecision {
+  const checks = buildBugBountyRunGateChecks(input);
+  const blockedReasons = checks.filter((check) => check.status === "blocked").map((check) => check.summary);
+  const warningReasons = checks.filter((check) => check.status === "warning").map((check) => check.summary);
+
+  return {
+    action: input.action,
+    allowed: blockedReasons.length === 0,
+    checks,
+    blockedReasons,
+    warningReasons,
+    nextRecommendedAction: nextBugBountyRunGateAction(input.action, blockedReasons, warningReasons)
+  };
+}
+
 function evaluateBugBountyPolicy(input: SafetyPolicyEngineInput): readonly SafetyPolicyViolation[] {
   const violations: SafetyPolicyViolation[] = [];
   const proposal = input.proposal.kind === "bug_bounty_review" ? input.proposal as BugBountyReviewProposal : undefined;
@@ -488,4 +545,263 @@ function hasTextSignal(source: string, signal: string): boolean {
   }
 
   return source.includes(signal);
+}
+
+function buildBugBountyRunGateChecks(input: BugBountyRunGateInput): readonly BugBountyRunGateCheck[] {
+  const checks: BugBountyRunGateCheck[] = [];
+  const evidenceStatus = input.evidence?.status;
+  const blockedEvidenceAudit = input.action === "record_evidence" && evidenceStatus === "blocked";
+
+  if (!input.scope) {
+    return [
+      {
+        id: "scope-recorded",
+        status: "blocked",
+        summary: "Bug bounty scope intake must be recorded before evidence or reports."
+      }
+    ];
+  }
+
+  checks.push({
+    id: "scope-recorded",
+    status: "passed",
+    summary: "Bug bounty scope intake is recorded."
+  });
+
+  if (input.scope.moochackerAssessment.safetyLevel === "blocked") {
+    checks.push({
+      id: "scope-safety",
+      status: "blocked",
+      summary: "MoochackerAgent marked scope safety as blocked."
+    });
+  } else if (input.scope.intakeAssessment.status !== "sufficient") {
+    checks.push({
+      id: "scope-sufficiency",
+      status: blockedEvidenceAudit ? "warning" : "blocked",
+      summary: blockedEvidenceAudit
+        ? "Scope intake is not sufficient; only blocked evidence notes are allowed for audit."
+        : "Scope intake must be sufficient before evidence or reports can proceed."
+    });
+  } else {
+    checks.push({
+      id: "scope-sufficiency",
+      status: "passed",
+      summary: "Scope intake is sufficient."
+    });
+  }
+
+  if (!input.targetMap) {
+    checks.push({
+      id: "target-map-recorded",
+      status: "warning",
+      summary: "Passive target map is not recorded; keep evidence as a limited hypothesis or record target-map first."
+    });
+  } else {
+    checks.push({
+      id: "target-map-recorded",
+      status: "passed",
+      summary: "Passive target map is recorded."
+    });
+
+    if (input.targetMap.assessment.safetyLevel === "blocked") {
+      checks.push({
+        id: "target-map-safety",
+        status: blockedEvidenceAudit ? "warning" : "blocked",
+        summary: blockedEvidenceAudit
+          ? "Target map has out-of-scope references; only blocked evidence notes are allowed for audit."
+          : `Target map safety gate blocked progress because it references out-of-scope assets: ${input.targetMap.assessment.outOfScopeReferences.join(", ")}.`
+      });
+    } else {
+      checks.push({
+        id: "target-map-safety",
+        status: "passed",
+        summary: "Target map does not contain blocking out-of-scope references."
+      });
+    }
+  }
+
+  if (input.evidence) {
+    checks.push(buildEvidenceScopeCheck(input.scope, input.evidence));
+    if (input.targetMap) {
+      checks.push(buildEvidenceTargetMapCoverageCheck(input.targetMap, input.evidence));
+    }
+  }
+
+  return checks;
+}
+
+function buildEvidenceScopeCheck(
+  scope: BugBountyScopeRecord,
+  evidence: BugBountyEvidenceInput | BugBountyEvidenceRecord
+): BugBountyRunGateCheck {
+  const references = cleanEvidenceReferences(evidence);
+  const outOfScopeReferences = references.filter((reference) =>
+    scope.intakeAssessment.boundaries
+      .filter((boundary) => boundary.source === "out_of_scope")
+      .some((boundary) => boundaryMatchesReference(boundary, reference))
+  );
+
+  if (outOfScopeReferences.length > 0) {
+    return {
+      id: "evidence-scope-boundary",
+      status: evidence.status === "blocked" ? "warning" : "blocked",
+      summary: evidence.status === "blocked"
+        ? `Evidence references out-of-scope assets and is recorded only as blocked audit context: ${outOfScopeReferences.join(", ")}.`
+        : `Evidence references out-of-scope assets: ${outOfScopeReferences.join(", ")}.`
+    };
+  }
+
+  return {
+    id: "evidence-scope-boundary",
+    status: "passed",
+    summary: "Evidence references do not match exact out-of-scope boundaries."
+  };
+}
+
+function buildEvidenceTargetMapCoverageCheck(
+  targetMap: BugBountyTargetMapRecord,
+  evidence: BugBountyEvidenceInput | BugBountyEvidenceRecord
+): BugBountyRunGateCheck {
+  const evidenceEndpoint = evidence.endpoint?.trim();
+  if (!evidenceEndpoint || targetMap.endpoints.length === 0 || evidence.status === "blocked") {
+    return {
+      id: "evidence-target-map-coverage",
+      status: "warning",
+      summary: "Evidence endpoint is not fully tied to a mapped endpoint; keep it as hypothesis until target-map is updated."
+    };
+  }
+
+  const covered = targetMap.endpoints.some((endpoint) => targetEndpointCoversEvidence(endpoint, evidence));
+  return {
+    id: "evidence-target-map-coverage",
+    status: covered ? "passed" : "warning",
+    summary: covered
+      ? "Evidence endpoint is covered by the passive target map."
+      : "Evidence endpoint is not present in the passive target map; update target-map before expanding testing."
+  };
+}
+
+function targetEndpointCoversEvidence(
+  endpoint: BugBountyTargetEndpoint,
+  evidence: BugBountyEvidenceInput | BugBountyEvidenceRecord
+): boolean {
+  if (evidence.method && endpoint.method && evidence.method !== endpoint.method) {
+    return false;
+  }
+  const endpointCandidates = [
+    endpoint.path,
+    endpoint.host ? `${endpoint.host}${endpoint.path}` : undefined,
+    endpoint.apiBase ? `${endpoint.apiBase}${endpoint.path.startsWith("/") ? "" : "/"}${endpoint.path}` : undefined
+  ].filter((value): value is string => value !== undefined);
+  const evidenceCandidates = evidenceEndpointReferences(evidence);
+
+  return evidenceCandidates.some((reference) =>
+    endpointCandidates.some((candidate) => referenceMatchesMappedEndpoint(reference, candidate))
+  );
+}
+
+function referenceMatchesMappedEndpoint(reference: string, mapped: string): boolean {
+  const referenceCandidates = referenceBoundaryCandidates(reference);
+  const mappedCandidates = referenceBoundaryCandidates(mapped);
+  return referenceCandidates.some((candidate) =>
+    mappedCandidates.some((mappedCandidate) => {
+      if (mappedCandidate.includes("{") || mappedCandidate.includes(":")) {
+        return routePatternMatches(mappedCandidate, candidate);
+      }
+      return candidate === mappedCandidate;
+    })
+  );
+}
+
+function routePatternMatches(pattern: string, candidate: string): boolean {
+  const escaped = pattern
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\\\{[^/]+\\\}/g, "[^/]+")
+    .replace(/:[^/]+/g, "[^/]+");
+  return new RegExp(`^${escaped}$`, "i").test(candidate);
+}
+
+function cleanEvidenceReferences(evidence: BugBountyEvidenceInput | BugBountyEvidenceRecord): readonly string[] {
+  return [evidence.asset, evidence.endpoint]
+    .filter((reference): reference is string => reference !== undefined)
+    .map((reference) => reference.trim())
+    .filter((reference) => reference.length > 0);
+}
+
+function evidenceEndpointReferences(evidence: BugBountyEvidenceInput | BugBountyEvidenceRecord): readonly string[] {
+  const endpoint = evidence.endpoint?.trim();
+  if (!endpoint) {
+    return cleanEvidenceReferences(evidence);
+  }
+
+  return [
+    endpoint,
+    evidence.asset ? `${evidence.asset}${endpoint.startsWith("/") ? "" : "/"}${endpoint}` : undefined
+  ].filter((reference): reference is string => reference !== undefined && reference.trim().length > 0);
+}
+
+function boundaryMatchesReference(boundary: BugBountyScopeBoundary, reference: string): boolean {
+  const boundaryValue = boundary.normalizedValue;
+  const candidates = referenceBoundaryCandidates(reference);
+  if (boundaryValue.includes("*")) {
+    return candidates.some((candidate) => wildcardBoundaryMatches(boundaryValue, candidate));
+  }
+  return candidates.includes(boundaryValue);
+}
+
+function referenceBoundaryCandidates(reference: string): readonly string[] {
+  const trimmed = reference.trim().toLowerCase();
+  const normalized = normalizeBoundaryValue(trimmed);
+  const candidates = new Set<string>([normalized]);
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      candidates.add(parsed.host);
+      candidates.add(parsed.hostname);
+      candidates.add(parsed.pathname.replace(/\/+$/, ""));
+      candidates.add(`${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`);
+    } catch {
+      return [...candidates];
+    }
+  }
+  return [...candidates].filter((candidate) => candidate.length > 0);
+}
+
+function normalizeBoundaryValue(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return trimmed.replace(/\/+$/, "");
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return trimmed;
+  }
+}
+
+function wildcardBoundaryMatches(pattern: string, reference: string): boolean {
+  const escaped = pattern
+    .split("*")
+    .map((segment) => segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp(`^${escaped}$`, "i").test(reference);
+}
+
+function nextBugBountyRunGateAction(
+  action: BugBountyRunGateAction,
+  blockedReasons: readonly string[],
+  warningReasons: readonly string[]
+): string {
+  if (blockedReasons.length > 0) {
+    return "Stop and clarify scope, remove out-of-scope references, or record a blocked evidence note only.";
+  }
+  if (warningReasons.length > 0) {
+    return action === "record_evidence"
+      ? "Keep the evidence as a hypothesis and update the passive target map before expanding testing."
+      : "Review target-map coverage and redaction before sharing the report draft.";
+  }
+  return action === "record_evidence"
+    ? "Proceed with scoped, redacted evidence ledger recording."
+    : "Proceed with conservative report drafting from stored evidence.";
 }

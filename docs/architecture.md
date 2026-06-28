@@ -99,7 +99,7 @@ User Natural Language Input
 
 11. Safety Policy
 
-   `packages/safety-policy` owns the deterministic v0.1 policy engine. It defines the capability registry, mode-specific allowed capabilities, default external-tool blocking, bug bounty active-testing stop conditions, shared secret redaction rules, and structured policy violation results. Policy evaluation is attached to `SafetyDecision` and persisted in run artifacts.
+   `packages/safety-policy` owns the deterministic v0.1 policy engine. It defines the capability registry, mode-specific allowed capabilities, default external-tool blocking, passive target-map capability separation, bug bounty active-testing stop conditions, bug bounty run gates, shared secret redaction rules, and structured policy violation results. Policy evaluation is attached to `SafetyDecision` and persisted in run artifacts.
 
 12. Skill Registry
 
@@ -138,11 +138,11 @@ Bug Bounty Mode must record:
 
 Before scope is known, Dure should continue with passive planning only.
 
-The Safety Policy engine blocks active testing stop-condition signals such as denial-of-service, brute force, rate-limit bypass, persistence, destructive testing, out-of-scope testing, and unauthorized access. External bug bounty capabilities remain placeholder-only until an explicit approval and adapter layer exists.
+The Safety Policy engine blocks active testing stop-condition signals such as denial-of-service, brute force, rate-limit bypass, persistence, destructive testing, out-of-scope testing, and unauthorized access. Passive target-map recording is separate from automated target mapping. External bug bounty capabilities remain placeholder-only until an explicit approval and adapter layer exists.
 
 Scope intake is persisted as `.dure/runs/<run-id>/scope.json`. It stores only user-provided assets, rules, roles, and data handling expectations. It also records a passive intake assessment with required-field checks, exact in/out-of-scope conflict warnings, dangerous allowed-technique blocks, boundary classification, next allowed passive actions, and redaction metadata. It does not discover endpoints, infer related targets, contact hosts, run scanners, or store credentials.
 
-Target maps are persisted as `.dure/runs/<run-id>/target-map.json` after scope intake is sufficient. They store only user-provided hosts, apps, API bases, auth states, role access, endpoint paths, state-changing markers, file upload/download flow notes, redirects, third-party integrations, source artifacts, and redaction metadata. They flag exact out-of-scope references and do not discover endpoints, crawl apps, send requests, or validate reachability in v0.1.
+Target maps are persisted as `.dure/runs/<run-id>/target-map.json` after scope intake is sufficient. They store only user-provided hosts, apps, API bases, auth states, role access, endpoint paths, state-changing markers, file upload/download flow notes, redirects, third-party integrations, source artifacts, and redaction metadata. They flag exact out-of-scope references and do not discover endpoints, crawl apps, send requests, or validate reachability in v0.1. Unsafe target maps block normal evidence recording and report drafting; only blocked audit notes can be recorded until scope is clarified.
 
 Evidence ledger entries are persisted as `.dure/runs/<run-id>/evidence-ledger.jsonl`. Each entry stores a lead id, status, asset, endpoint, method, role, hypothesis, request/response placeholders, impact, confidence, scope note, program rule notes, and next action. Dure applies local redaction before writing the ledger and does not validate or reproduce the lead in v0.1.
 

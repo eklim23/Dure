@@ -811,6 +811,77 @@ test("run store blocks target maps before sufficient scope and flags unsafe refe
   assert.match(targetMap.notes ?? "", /\[redacted-secret\]/);
 });
 
+test("run store applies target map safety gates to evidence and reports", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-target-map-run-gate-"));
+  const store = new RunStore(path.join(tempRoot, ".dure", "runs"));
+  const blockedEvidenceRun = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:43.000Z")
+  });
+  const blockedReportRun = store.persistRun({
+    context: bugBountyContextFixture(),
+    selectedAgentTeam: ["BugBountyAgent", "MoochackerAgent", "ScopeGuardAgent", "EvidenceAgent", "ReviewerAgent"],
+    proposal: bugBountyProposalFixture(),
+    safetyDecision: safetyFixture(),
+    decisionLog: { entries: [] },
+    nextRecommendedAction: "Review MoochackerAgent's safety guidance.",
+    now: new Date("2026-06-27T00:00:44.000Z")
+  });
+
+  store.attachBugBountyScope(blockedEvidenceRun.id, {
+    scope: sufficientScopeFixture(),
+    now: new Date("2026-06-27T00:00:45.000Z")
+  });
+  store.attachBugBountyTargetMap(blockedEvidenceRun.id, {
+    targetMap: {
+      ...targetMapFixture(),
+      hosts: ["api.example.com", "admin.example.com"]
+    },
+    now: new Date("2026-06-27T00:00:46.000Z")
+  });
+  assert.throws(
+    () => store.recordBugBountyEvidence(blockedEvidenceRun.id, { evidence: evidenceFixture({ status: "testing" }) }),
+    /Target map safety gate blocked progress/
+  );
+  const blockedEvidence = store.recordBugBountyEvidence(blockedEvidenceRun.id, {
+    evidence: evidenceFixture({
+      status: "blocked",
+      asset: "admin.example.com",
+      endpoint: "/admin",
+      nextAction: "Remove or clarify out-of-scope reference."
+    }),
+    now: new Date("2026-06-27T00:00:47.000Z")
+  });
+  assert.equal(blockedEvidence.status, "blocked");
+  assert.ok(blockedEvidence.safetyNotes.some((note) => note.includes("Safety gate warning")));
+
+  store.attachBugBountyScope(blockedReportRun.id, {
+    scope: sufficientScopeFixture(),
+    now: new Date("2026-06-27T00:00:48.000Z")
+  });
+  const lead = store.recordBugBountyEvidence(blockedReportRun.id, {
+    evidence: evidenceFixture({ status: "confirmed", confidence: "high" }),
+    now: new Date("2026-06-27T00:00:49.000Z")
+  });
+  store.attachBugBountyTargetMap(blockedReportRun.id, {
+    targetMap: {
+      ...targetMapFixture(),
+      hosts: ["api.example.com", "admin.example.com"]
+    },
+    now: new Date("2026-06-27T00:00:50.000Z")
+  });
+
+  assert.throws(
+    () => store.draftBugBountyReport(blockedReportRun.id, { draft: { leadId: lead.id, severity: "medium" } }),
+    /Target map safety gate blocked progress/
+  );
+});
+
 test("run store records bug bounty evidence ledger entries with redaction", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "dure-evidence-"));
   const store = new RunStore(path.join(tempRoot, ".dure", "runs"));

@@ -13,10 +13,12 @@ Dure is built around conservative agent control.
 - Applied workspace verification is limited to allow-listed `package.json` scripts: `test`, `lint`, and `typecheck`.
 - Arbitrary shell commands, package installs, network audits, git commands, and pre/post lifecycle hooks are not allowed in the v0.1 verification path.
 - Safety policy evaluation uses mode-specific capability allowlists and blocks external-tool execution by default.
+- Bug Bounty Mode separates passive target-map recording from automated target mapping; automated mapping remains an external placeholder.
 - Bug bounty active-testing stop conditions block denial-of-service, brute force, rate-limit bypass, persistence, destructive testing, out-of-scope testing, and unauthorized access requests.
 - Verification output is length-limited and redacts secret-like values before persistence.
 - Run export writes a local Markdown audit summary and applies the same secret-like redaction rules to user-visible text fields.
 - Bug bounty target maps are user-supplied passive records only; Dure does not discover hosts, crawl apps, scan endpoints, or contact targets in v0.1.
+- Target-map safety gates block normal evidence and report drafting when out-of-scope references are recorded; only blocked audit notes are allowed.
 - Bug bounty evidence ledger entries are user-supplied records only; Dure does not send requests, scan targets, exploit issues, or confirm findings in v0.1.
 - Evidence ledger persistence applies local redaction for authorization headers, cookies, tokens, passwords, API keys, sessions, CSRF values, bearer tokens, and email-like personal data.
 - Bug bounty report drafts are generated only from stored, redacted evidence; Dure does not submit reports, contact targets, or validate findings in v0.1.
